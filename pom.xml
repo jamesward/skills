@@ -10,7 +10,7 @@
 
     <groupId>com.jamesward</groupId>
     <artifactId>skills</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
+    <version>0.0.1</version>
     <packaging>jar</packaging>
 
     <name>James Ward's Agent Skills</name>
@@ -35,7 +35,7 @@
         <connection>scm:git:https://github.com/jamesward/skills.git</connection>
         <developerConnection>scm:git:https://github.com/jamesward/skills.git</developerConnection>
         <url>https://github.com/jamesward/skills</url>
-      <tag>HEAD</tag>
+      <tag>skills-0.0.1</tag>
   </scm>
 
     <properties>
