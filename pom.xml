@@ -9,13 +9,13 @@
     </parent>
 
     <groupId>com.jamesward</groupId>
-    <artifactId>zen</artifactId>
+    <artifactId>skills</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <packaging>jar</packaging>
 
-    <name>Zen of James Skill</name>
+    <name>James Ward's Agent Skills</name>
     <description>A SkillsJar to guide your AI to code like James Ward</description>
-    <url>https://github.com/jamesward/zen</url>
+    <url>https://github.com/jamesward/skills</url>
 
     <licenses>
         <license>
@@ -32,9 +32,9 @@
     </developers>
 
     <scm>
-        <connection>scm:git:https://github.com/jamesward/zen.git</connection>
-        <developerConnection>scm:git:https://github.com/jamesward/zen.git</developerConnection>
-        <url>https://github.com/jamesward/zen</url>
+        <connection>scm:git:https://github.com/jamesward/skills.git</connection>
+        <developerConnection>scm:git:https://github.com/jamesward/skills.git</developerConnection>
+        <url>https://github.com/jamesward/skills</url>
       <tag>HEAD</tag>
   </scm>
 
@@ -44,6 +44,19 @@
 
     <build>
         <plugins>
+            <plugin>
+                <groupId>com.skillsjars</groupId>
+                <artifactId>maven-plugin</artifactId>
+                <version>0.0.4</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>package</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-release-plugin</artifactId>
