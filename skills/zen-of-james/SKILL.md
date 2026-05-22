@@ -11,6 +11,7 @@ MAKE ILLEGAL STATES UNREPRESENTABLE!!!
 - Represent nullability in types
 - Universal equality is a huge potential source of hidden bugs (e.g. `person == cat`) so in languages that support it, use multiversal equality (like with `CanEqual` type classes)
 - Always use manage resources correctly (e.g. try with resources) to avoid leaks
+- Never use stringly typed things. i.e. if you have the same string in multiple places and they need to match, put it in an actual type lie an Enum.
 
 NO MUTABILITY EVER!!!
 - Mutable variables may seem like a good idea. They are not.
