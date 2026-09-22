@@ -27,3 +27,4 @@ TEST ONIONS ARE GOOD. TEST ASSERTION DSLS ARE BAD.
 - The test onion enables testing iteration loops which start fast & lite and progress to slower & integrated.
 - Types > Unit tests for pure functions > Integration tests for side effects which use fake implementations > Integration tests for side effects with Testcontainers
 - Use `assertTrue` with regular code / boolean evaluations
+- Do not write tests for things proved by the compiler / type system

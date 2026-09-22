@@ -19,6 +19,17 @@ is not repeated here.
   `given` instances). If a Java type forces construction, wrap it.
 - `.asInstanceOf` / casts should almost never appear. If you reach for one,
   the types are wrong upstream — fix them there.
+- At a boundary you don't control, depend only on a library's strongly-typed
+  surface. An untyped (`Any`) or reflectively-shaped field is a runtime
+  landmine: a cast there — or a version skew that mis-shapes it — throws
+  `ClassCastException` only when that path executes, often surfacing long after
+  the change that armed it (e.g. when a log level is raised and a logger finally
+  evaluates its message). If a library's convenience implementation consumes the
+  untyped part, implement its small typed interface yourself and touch only the
+  well-typed fields. (Real case: a magnum `SqlLogger` whose `params` was an
+  `Any`-backed `Iterator[Iterator[Any]]` under version skew — replacing it with
+  our own logger that reads only `sql`/`execTime`/`cause` made the whole failure
+  class impossible.)
 - Model ADTs with `enum`. Use `case` for each variant; use exhaustive `match`
   (no catch-all `case _` unless a default is genuinely intended).
 - Implicits are `given` / `using`. Name `given` instances when they'll be
@@ -194,6 +205,16 @@ the entry via `.onExit`.
 - For integration tests that need real infrastructure, prefer Testcontainers
   (e.g. a container-backed layer yielding the config) over embedded native
   binaries, which fork/exec per test and race under parallel runs.
+- Share one expensive container across a module's specs — do NOT start one per
+  spec. Per-spec containers multiply boot/migration cost and, under rootless
+  Docker, race the port manager (`bind: address already in use`) when specs
+  start in parallel. Pattern: a JVM-singleton container (`lazy val`, reaped at
+  exit) that migrates a `template` database once; each spec gets its own cloned
+  database (`CREATE DATABASE … TEMPLATE`) so data is fully isolated and specs
+  still run in parallel. Funnel every container start (and each `CREATE
+  DATABASE`) through one lock so two ephemeral host ports are never programmed
+  at the same instant. This is the "reuse the expensive resource, isolate the
+  cheap one" shape — keep parallelism, don't pay 27× for it.
 - Persist test output to a file when you run a suite, so results can be
   re-read without re-running.
 - When something breaks in a confusing way, first reproduce it in a test, then
