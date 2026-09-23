@@ -3,6 +3,15 @@ name: zen-of-projects
 description: Whether creating new projects or bringing existing ones into compliance, do these things.
 ---
 
+# Automation & Agent Guidance
+
+- Projects should have an AGENTS.md with unique project-oriented guidance, like which Skills should be used.
+- Automation guidance should be in a `.factory` directory. Daily routine in `.factory/DAILY.md` with instructions on updating dependencies, running CI, aligning to the instructions in AGENTS.md and this note:
+```
+If there are other open PRs for this work, update that PR instead of creating a new one.
+```
+
+
 # Scala Projects
 
 - Use latest release sbt 2.x from https://www.javadocs.dev/org.scala-sbt/sbt
@@ -29,6 +38,8 @@ scalacOptions ++= Seq(
 libraryDependencies += "com.jamesward" % "skills" % "<latest version>" % Skills
 ```
 - Initialize the SkillsJars by following instructions at: https://www.skillsjars.com/setup
+- Explicit dependencies should only be the outermost ones. Transitive dependencies should not be explicitly specified. If an explicit dependency needs the version of a transitive, use the sbt-tdepver sbt plugin: https://github.com/jamesward/sbt-tdepver
+- 
 
 ## New Bootstrap
 
