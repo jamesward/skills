@@ -19,16 +19,39 @@ When they disagree, this Skill wins for general conventions and `AGENTS.md` wins
 
 Use exactly this content:
 
-```markdown
+````markdown
 # Daily Routine
 
 If there are other open PRs for this work, update that PR instead of creating a new one.
 
-1. Update the `com.jamesward:skills` dependency to its latest stable release, then run
-   `./sbt extractSkillsJars` (or the sbt-mcp `sbt-task` tool).
-2. Read `.kiro/skills/**/zen-of-projects/SKILL.md` and follow its "Daily Routine" section,
-   using `AGENTS.md` for this project's commands and documented exceptions.
-```
+0. Load the project's MCP tools before anything else. `AGENTS.md` names the sbt-mcp server
+   (`sbt-mcp-<project>`). In Claude Code its tools are deferred, so load them with ToolSearch
+   (search for the server name). They include `sbt-task` for sbt commands and the javadocs.dev
+   tools such as `get_latest_version`. Use them for the rest of the run, and fall back to `./sbt`
+   and `curl` only when they are unavailable. Say which one you used.
+1. Update the Skills dependency. It is pinned in `build.sbt` as
+   `"com.jamesward" % "skills" % "<version>" % Skills`. List every pin (some projects also pin it
+   in an `example/` build) with:
+
+   ```bash
+   grep -rn '"com.jamesward" % "skills"' --include='*.sbt' . | grep -v -e /target/ -e /src/sbt-test/
+   ```
+
+   Get the latest release with `get_latest_version` (group `com.jamesward`, artifact `skills`). Without
+   MCP, ask Maven Central itself, not a mirror (mirrors lag new releases):
+
+   ```bash
+   curl -fsS --retry 5 --retry-delay 10 --retry-all-errors https://repo.maven.apache.org/maven2/com/jamesward/skills/maven-metadata.xml | sed -n 's:.*<release>\(.*\)</release>.*:\1:p'
+   ```
+
+   Maven Central can rate-limit cloud sessions (HTTP 429); the retries cover that. Set every pin
+   to the version it prints.
+2. Run `reload; extractSkillsJars` with the sbt-mcp `sbt-task` tool, or `./sbt extractSkillsJars`. `.kiro/skills/` is gitignored, so it does not exist until this
+   runs. If sbt cannot download artifacts (for example HTTP 429 or a proxy 403), stop and report the
+   error instead of changing resolvers.
+3. Read `.kiro/skills/*zen-of-projects*/SKILL.md` and follow its "Daily Routine" section, using
+   `AGENTS.md` for this project's commands and documented exceptions.
+````
 
 The skills dependency is updated first so the rest of the run follows the newest version of this Skill.
 
@@ -40,14 +63,25 @@ The skills dependency is updated first so the rest of the run follows the newest
    gh pr list --state open --search 'in:title "Daily maintenance:" OR in:title "Agent alignment:"'
    ```
 
+   Some cloud environments proxy GitHub and allow only a limited set of GraphQL operations. If a `gh` command fails with a GraphQL error, use the REST API instead, for example `gh api 'repos/{owner}/{repo}/pulls?state=open' --jq '.[] | select(.title | test("^(Daily maintenance|Agent alignment):")) | [.number, .head.ref, .created_at] | @tsv'`.
+
    Reuse the oldest match and check out its branch. Close any other matches as duplicates. Create a branch only when there is no match. New PRs use the `Daily maintenance:` prefix and the `daily-maintenance` label, and target the repository's default branch.
 2. **Preserve existing work.** Build on the PR branch and any uncommitted changes. Never reset, force-push over, or discard them.
 3. **Update dependencies.** Move sbt, Scala, every plugin, every dependency, and the GitHub Actions versions in `.github/workflows` to the latest stable version. Apply the compatibility rules below and the exceptions in `AGENTS.md`. Fold in any open dependency-bump PRs, then close them.
-   - Resolve versions and research API changes with the javadocs.dev tools that the project's sbt-mcp server proxies. Use `get_latest_version` for an artifact's newest version. When that version is a prerelease, check the artifact's Maven metadata for the newest stable one. Use `list_javadoc_symbols`, `get_javadoc_symbol`, `list_source_files`, and `get_source_file` to read the new API when migrating code. If the MCP server is unavailable, say so and query `https://repo1.maven.org/maven2/<group path>/<artifact>/maven-metadata.xml` directly.
+   - **Check MCP first.** At the start of the run, note whether the project's sbt-mcp server (named in `AGENTS.md`) and the javadocs.dev tools are available, and say so in the PR description. In Claude Code, MCP tools can be deferred and won't appear in your tool list until you load them with ToolSearch. Search for the server name before concluding that they are missing. If the sbt-mcp server is configured but missing, read `/tmp/sbt-mcp-stdio.log` and `/tmp/sbt-mcp-server.log` and include the cause.
+   - **Find versions with javadocs.dev MCP.** Use `get_latest_version`, which skips prereleases, through the project's sbt-mcp server or the javadocs.dev connector (`https://www.javadocs.dev/mcp`). Use `list_javadoc_symbols`, `get_javadoc_symbol`, `list_source_files` and `get_source_file` to read a new API when migrating code.
+   - **Fallback without MCP: Maven metadata.** Maven Central rate-limits shared cloud IPs (HTTP 429), so make few requests, retry, and filter out prereleases. Never use a mirror for this, because mirrors lag new releases.
+
+     ```bash
+     latest_stable() { local g="${1%%:*}" a="${1##*:}"; curl -fsS --retry 5 --retry-delay 10 --retry-all-errors "https://repo.maven.apache.org/maven2/${g//.//}/$a/maven-metadata.xml" | grep -o '<version>[^<]*' | sed 's/<version>//' | grep -E '^[0-9]' | grep -viE -- '[-.]?(m|rc|alpha|beta|snapshot|cr|ea|preview|dev|pre)[-.]?[0-9]*([-.]|$)' | sort -V | tail -1; }
+     latest_stable org.scala-sbt:sbt   # prints e.g. 2.0.9; empty output means only prereleases exist
+     ```
+
+   - **GitHub Actions versions.** Use `git ls-remote --tags https://github.com/<owner>/<action>`, not the GitHub API. Cloud sessions can only call the API for the repositories attached to the session.
 4. **Align.** Bring the project into line with this Skill, using the version extracted in the bootstrap step. Update `AGENTS.md` where code or workflow has drifted, and remove any text that restates this Skill.
 5. **Validate.** Run the Validation sequence below with the project's commands from `AGENTS.md`. If a bump fails, try to fix it: migrate to the new API, apply the compatibility rules, and re-run validation.
 6. **Publish and merge.** Commit to the rolling PR branch, push, and rewrite the PR description to summarize all changes on the branch. If nothing changed, take no action. Then:
-   - **Merge** (`gh pr merge --squash --delete-branch`) when validation and the PR's CI checks pass, and the branch contains only dependency bumps plus the fixes they needed.
+   - **Merge** (`gh pr merge --squash --delete-branch`, or `gh api -X PUT 'repos/{owner}/{repo}/pulls/<number>/merge' -f merge_method=squash` if GraphQL is blocked) when validation and the PR's CI checks pass, and the branch contains only dependency bumps plus the fixes they needed.
    - **Request human review** and do not merge when the branch also changes public APIs, behavior, or alignment beyond version bumps, or when `AGENTS.md` requires human review for the kind of change involved. Add the `needs-human` label and say what needs a decision.
    - **Escalate** when a failure cannot be fixed. Leave the PR open and unmerged with the `needs-human` label. Comment with the failing bump, the error, and what was tried. Do not revert the bump just to get a green build.
 
@@ -77,6 +111,21 @@ The skills dependency is updated first so the rest of the run follows the newest
 
 - Write settings in flat `build.sbt` style, for example top-level `scalaVersion := "<version>"` rather than wrapping ordinary settings in `projectRef.settings(...)`. Multi-project builds may still use project declarations for topology, aggregation, dependencies, and plugin enablement.
 - Keep both `sbt` and `sbt.bat` launcher scripts in the project root. Commit the POSIX executable bit on `sbt`; verify `sbt.bat` is present and runnable on Windows.
+
+## Resolvers
+
+- Use sbt's default resolvers: Maven Central plus the `local` Ivy repository. Never commit resolver configuration to a project. That rules out a `project/repositories` file, `-Dsbt.repository.config` or `-Dsbt.override.build.repos` in `.sbtopts` or `.jvmopts`, mirror URLs, and `Resolver.mavenLocal`, `Resolver.file`, or `file://` resolvers in the build.
+- To test against an unpublished artifact, use `publishLocal`. The `local` Ivy repository is already a default resolver, so no resolver change is needed. If a test really needs another resolver, keep it ephemeral: pass it for that one invocation (for example `./sbt 'set resolvers += Resolver.mavenLocal' test`) and make sure it is not in the committed diff.
+- Mirrors are environment configuration. An automated environment that gets rate-limited by Maven Central can put a mirror first in the user-level `~/.sbt/repositories`, with Maven Central as the fallback, and add `-Dsbt.override.build.repos=true` to the user-level `~/.config/sbt/sbtopts`:
+
+  ```text
+  [repositories]
+    local
+    google-maven-central: https://maven-central.storage-download.googleapis.com/maven2/
+    maven-central
+  ```
+
+  The sbt launcher and the build then download from the Google mirror and fall back to Maven Central for anything the mirror lacks, such as a release from the last few hours. With `sbt.override.build.repos=true`, sbt ignores `resolvers` declared in the build. Add any extra repository a project needs to the environment's list instead.
 
 ## sbt-mcp
 
@@ -267,7 +316,7 @@ After creating or changing the build:
 1. Run `./sbt shutdown` first when environment variables, JVM `-D` properties, or daemon-sensitive configuration changed.
 2. Run `./sbt extractSkillsJars` and verify the generated Skills are ignored.
 3. Compile main and test sources with the strict compiler options enabled.
-4. Run the complete non-metered test suite. Prefer `testFull` in CI when a guaranteed full sbt 2 test run is required rather than an incremental cached run.
+4. Run the complete non-metered test suite. Testcontainers needs a Docker daemon. If `docker info` fails in a cloud session (where Docker is installed but not running), start it with `dockerd > /tmp/dockerd.log 2>&1 &` and wait until `docker info` succeeds. Don't skip Docker-backed tests because of it. Prefer `testFull` in CI when a guaranteed full sbt 2 test run is required rather than an incremental cached run.
 5. For server applications, run `stage` and a minimal startup or health-check smoke test.
 6. Keep paid, metered, or destructive integration suites out of the default validation path; gate them explicitly and run them only when requested.
 7. Fix all validation failures before declaring the project compliant. If a required check cannot run, document the blocker and the closest successful check.
