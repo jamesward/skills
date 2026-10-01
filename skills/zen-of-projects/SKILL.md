@@ -5,12 +5,51 @@ description: Whether creating new projects or bringing existing ones into compli
 
 # Automation & Agent Guidance
 
-- Every project should have an `AGENTS.md` with unique, project-oriented guidance, including which Skills apply and the exact build, test, and development workflow.
-- Put automation guidance in a `.factory` directory. Record the daily routine in `.factory/DAILY.md`, including instructions to update dependencies, run CI, align the project with `AGENTS.md` and this Skill, and preserve existing work. Include this instruction:
+## One source of truth
 
-```text
+Say each thing once and reference it elsewhere:
+
+- **This Skill** owns general conventions, compatibility rules, the validation sequence, and the daily routine.
+- **`AGENTS.md`** owns project facts only: what the project is, which Skills apply, exact build/test/dev commands, the MCP server name and port, gated or paid tests, and every **exception** to this Skill together with its reason (for example a required Java version, an allowed prerelease, or an intentional pin). Do not restate this Skill's general rules in `AGENTS.md`; write "Follow the `zen-of-projects` Skill" and record only what differs or is unique.
+- **`.factory/DAILY.md`** is the bootstrap below, verbatim. It contains no project-specific content.
+
+When they disagree, this Skill wins for general conventions and `AGENTS.md` wins for its documented exceptions. Fix the drift in the same change rather than leaving two versions.
+
+## `.factory/DAILY.md`
+
+Use exactly this content:
+
+```markdown
+# Daily Routine
+
 If there are other open PRs for this work, update that PR instead of creating a new one.
+
+1. Update the `com.jamesward:skills` dependency to its latest stable release, then run
+   `./sbt extractSkillsJars` (or the sbt-mcp `sbt-task` tool).
+2. Read `.kiro/skills/**/zen-of-projects/SKILL.md` and follow its "Daily Routine" section,
+   using `AGENTS.md` for this project's commands and documented exceptions.
 ```
+
+The skills dependency is updated first so the rest of the run follows the newest version of this Skill.
+
+## Daily Routine
+
+1. **Find the rolling PR first.** Look for an open PR whose title starts with `Daily maintenance:`. Also match the legacy prefix `Agent alignment:`:
+
+   ```bash
+   gh pr list --state open --search 'in:title "Daily maintenance:" OR in:title "Agent alignment:"'
+   ```
+
+   Reuse the oldest match and check out its branch. Close any other matches as duplicates. Create a branch only when there is no match. New PRs use the `Daily maintenance:` prefix and the `daily-maintenance` label, and target the repository's default branch.
+2. **Preserve existing work.** Build on the PR branch and any uncommitted changes. Never reset, force-push over, or discard them.
+3. **Update dependencies.** Move sbt, Scala, every plugin, every dependency, and the GitHub Actions versions in `.github/workflows` to the latest stable version. Apply the compatibility rules below and the exceptions in `AGENTS.md`. Fold in any open dependency-bump PRs, then close them.
+   - Resolve versions and research API changes with the javadocs.dev tools that the project's sbt-mcp server proxies. Use `get_latest_version` for an artifact's newest version. When that version is a prerelease, check the artifact's Maven metadata for the newest stable one. Use `list_javadoc_symbols`, `get_javadoc_symbol`, `list_source_files`, and `get_source_file` to read the new API when migrating code. If the MCP server is unavailable, say so and query `https://repo1.maven.org/maven2/<group path>/<artifact>/maven-metadata.xml` directly.
+4. **Align.** Bring the project into line with this Skill, using the version extracted in the bootstrap step. Update `AGENTS.md` where code or workflow has drifted, and remove any text that restates this Skill.
+5. **Validate.** Run the Validation sequence below with the project's commands from `AGENTS.md`. If a bump fails, try to fix it: migrate to the new API, apply the compatibility rules, and re-run validation.
+6. **Publish and merge.** Commit to the rolling PR branch, push, and rewrite the PR description to summarize all changes on the branch. If nothing changed, take no action. Then:
+   - **Merge** (`gh pr merge --squash --delete-branch`) when validation and the PR's CI checks pass, and the branch contains only dependency bumps plus the fixes they needed.
+   - **Request human review** and do not merge when the branch also changes public APIs, behavior, or alignment beyond version bumps, or when `AGENTS.md` requires human review for the kind of change involved. Add the `needs-human` label and say what needs a decision.
+   - **Escalate** when a failure cannot be fixed. Leave the PR open and unmerged with the `needs-human` label. Comment with the failing bump, the error, and what was tried. Do not revert the bump just to get a green build.
 
 # Scala Projects
 
@@ -20,6 +59,19 @@ If there are other open PRs for this work, update that PR instead of creating a 
 - Use the latest stable Scala release from `org.scala-lang:scala-library`. Reject prerelease versions and confirm ambiguity against the [official Scala download page](https://www.scala-lang.org/download/).
 - Resolve the latest stable version of every plugin and dependency, then pin the exact version in the build. Never leave `<latest version>` or an open version range in a finished project.
 - Use Java 21 LTS by default for local development and CI unless the project documents a reason to require a newer version.
+
+## Compatibility rules for upgrades
+
+"Latest stable" is constrained by these rules. Automated version bumps often break them.
+
+- **sbt plugins use sbt's Scala.** An sbt 2 plugin's Scala 3 `scalaVersion` must equal the `scala3-library_3` version in the pinned `org.scala-sbt:sbt` POM (3.8.4 for sbt 2.0.9). Never bump a plugin's Scala on its own: newer TASTy cannot be read by sbt's build compiler. Plugins cross-built for sbt 1 use the latest Scala 2.12.x with `-deprecation -Xfatal-warnings`, because 2.12 has no strict equality. Scripted test fixtures follow the same rule.
+- **Java 25 bytecode forces Java 25.** Some libraries publish class file version 69, for example Kyo `1.0.0-RC*` and `html-to-markdown` 3.x. On Java 21 they fail with `UnsupportedClassVersionError`. Projects that depend on them use Java 25 and record the reason in `AGENTS.md`. After a failed build on the wrong JDK, run `clean` before validating again.
+- **JDK 24+-only JVM flags.** Flags such as `--sun-misc-unsafe-memory-access=allow` stop Java 21 from starting. Keep them out of `.sbtopts` and `.jvmopts`. Prefer `-Dsun.misc.unsafe.memory.access=allow`, which works on JDK 21 through 25, including in native-packager's `application.ini`. Otherwise add the flag conditionally inside `Def.uncached { ... }`, because sbt 2 caches JDK-dependent task results across JDK switches.
+- **Prereleases only when there is no stable release.** Examples are `dev.zio:zio-direct` 1.0.0-RC7 and Kyo 1.0.0-RC*. Take the newest such release only if the tests pass, and record the exception in `AGENTS.md`.
+- **Intentional pins.** Keep a version that `AGENTS.md` documents as intentionally pinned, such as one used by a bug reproducer.
+- **Deprecations break the build under `-Werror`.** Migrate to the replacement API rather than suppressing the warning. For example, replace `ZIO.done(exit)` with `exit`, and replace a library's deprecated alias with its new name.
+- **Archived or renamed artifacts.** When a dependency is archived or superseded (for example `zio-bedrock-converse` replaced by `zio-bedrock`), migrate to the successor. Do not keep bumping the old artifact.
+- If a bump breaks the build and cannot reasonably be fixed, follow the escalation step in the Daily Routine.
 
 ## Build structure and launchers
 
@@ -195,6 +247,18 @@ libraryDependencies += "com.jamesward" % "skills" % "<latest stable version>" % 
   ```scala
   versionScheme := Some("semver-spec")
   ```
+
+## Maven Central Badge
+
+Every project that publishes an artifact to Maven Central, including libraries and sbt plugins, puts a javadocs.dev badge directly under the title in `README.md`:
+
+```markdown
+[![javadocs.dev](https://www.javadocs.dev/<groupId>/<artifactId>/badge.svg)](https://www.javadocs.dev/<groupId>/<artifactId>/latest)
+```
+
+- Use the published artifactId including its suffix: `_3` for Scala 3 libraries (for example `com.jamesward/zio-mavencentral_3`), and `_sbt2_3` for sbt 2 plugins (for example `com.jamesward/sbt-reload_sbt2_3`). For plugins cross-built for sbt 1 and sbt 2, use the `_sbt2_3` artifact.
+- Check that `https://www.javadocs.dev/<groupId>/<artifactId>/latest` resolves before committing the badge.
+- When a build publishes several modules, add one badge per primary published module.
 
 ## Validation
 
