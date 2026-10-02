@@ -24,17 +24,21 @@ Use exactly this content:
 
 If there are other open PRs for this work, update that PR instead of creating a new one.
 
-0. Load the project's MCP tools before anything else. `AGENTS.md` names the sbt-mcp server
-   (`sbt-mcp-<project>`). In Claude Code its tools are deferred, so load them with ToolSearch
-   (search for the server name). They include `sbt-task` for sbt commands and the javadocs.dev
-   tools such as `get_latest_version`. Use them for the rest of the run, and fall back to `./sbt`
-   and `curl` only when they are unavailable. Say which one you used.
-1. Update the Skills dependency. It is pinned in `build.sbt` as
-   `"com.jamesward" % "skills" % "<version>" % Skills`. List every pin (some projects also pin it
-   in an `example/` build) with:
+0. Load the project's MCP tools before anything else. `AGENTS.md` names the MCP server:
+   `sbt-mcp-<project>` for sbt projects, `javadocs` for Maven and Gradle projects. In Claude Code
+   these tools are deferred, so load them with ToolSearch (search for the server name). They include
+   the javadocs.dev tools such as `get_latest_version`, and for sbt also `sbt-task`. Use them for
+   the rest of the run, and fall back to the build tool's launcher and `curl` only when they are
+   unavailable. Say which one you used.
+1. Update the Skills dependency, `com.jamesward:skills`, to its latest release. Where it's pinned:
+   - sbt: `"com.jamesward" % "skills" % "<version>" % Skills` in `build.sbt`
+   - Maven: a dependency of the `com.skillsjars:maven-plugin` plugin in `pom.xml`
+   - Gradle: `skill("com.jamesward:skills:<version>")` in `build.gradle.kts` or `gradle/libs.versions.toml`
+
+   Some projects also pin it in an `example/` build. List every pin with:
 
    ```bash
-   grep -rn '"com.jamesward" % "skills"' --include='*.sbt' . | grep -v -e /target/ -e /src/sbt-test/
+   grep -rnE 'com\.jamesward.{0,20}skills|<artifactId>skills</artifactId>' --include='*.sbt' --include=pom.xml --include='*.gradle' --include='*.gradle.kts' --include='*.toml' . | grep -v -e /target/ -e /build/ -e /src/sbt-test/
    ```
 
    Get the latest release with `get_latest_version` (group `com.jamesward`, artifact `skills`). Without
@@ -46,11 +50,20 @@ If there are other open PRs for this work, update that PR instead of creating a 
 
    Maven Central can rate-limit cloud sessions (HTTP 429); the retries cover that. Set every pin
    to the version it prints.
-2. Run `reload; extractSkillsJars` with the sbt-mcp `sbt-task` tool, or `./sbt extractSkillsJars`. `.kiro/skills/` is gitignored, so it does not exist until this
-   runs. If sbt cannot download artifacts (for example HTTP 429 or a proxy 403), stop and report the
-   error instead of changing resolvers.
+2. Extract the Skills to `.kiro/skills/`:
+   - sbt: `extractSkillsJars` through the sbt-mcp `sbt-task` tool, or `./sbt extractSkillsJars`.
+     After `build.sbt` changes, sbt reloads and restarts the sbt-mcp server. The first `sbt-task`
+     call afterwards can report a lost connection; run it again rather than switching to `./sbt`.
+   - Maven: `./mvnw -q skillsjars:extract`
+   - Gradle: `./gradlew extractSkillsJars`
+
+   `.kiro/skills/` is gitignored, so it doesn't exist until this runs. If the build can't download
+   artifacts (for example HTTP 429 or a proxy 403), stop and report the error instead of changing
+   resolvers.
 3. Read `.kiro/skills/*zen-of-projects*/SKILL.md` and follow its "Daily Routine" section, using
-   `AGENTS.md` for this project's commands and documented exceptions.
+   `AGENTS.md` for this project's commands and documented exceptions. While an unreleased version of
+   the Skill is being tested, `.factory/skills/zen-of-projects/SKILL.md` exists. Read that file
+   instead, and don't delete it.
 ````
 
 The skills dependency is updated first so the rest of the run follows the newest version of this Skill.
@@ -63,27 +76,59 @@ The skills dependency is updated first so the rest of the run follows the newest
    gh pr list --state open --search 'in:title "Daily maintenance:" OR in:title "Agent alignment:"'
    ```
 
-   Some cloud environments proxy GitHub and allow only a limited set of GraphQL operations. If a `gh` command fails with a GraphQL error, use the REST API instead, for example `gh api 'repos/{owner}/{repo}/pulls?state=open' --jq '.[] | select(.title | test("^(Daily maintenance|Agent alignment):")) | [.number, .head.ref, .created_at] | @tsv'`.
+   In Claude Code cloud sessions, `gh` commands that use GraphQL (`gh pr list`, `gh pr merge`, ...) fail with `HTTP 403: GitHub GraphQL is not available`. Use the built-in GitHub tools (`mcp__github__*`, loaded with ToolSearch) or the REST API instead, for example `gh api 'repos/{owner}/{repo}/pulls?state=open' --jq '.[] | select(.title | test("^(Daily maintenance|Agent alignment):")) | [.number, .head.ref, .created_at] | @tsv'`.
 
    Reuse the oldest match and check out its branch. Close any other matches as duplicates. Create a branch only when there is no match. New PRs use the `Daily maintenance:` prefix and the `daily-maintenance` label, and target the repository's default branch.
-2. **Preserve existing work.** Build on the PR branch and any uncommitted changes. Never reset, force-push over, or discard them.
-3. **Update dependencies.** Move sbt, Scala, every plugin, every dependency, and the GitHub Actions versions in `.github/workflows` to the latest stable version. Apply the compatibility rules below and the exceptions in `AGENTS.md`. Fold in any open dependency-bump PRs, then close them.
+2. **Preserve existing work.** Build on the PR branch and any uncommitted changes. Never reset, force-push over, or discard them. Work only from the repository's default branch, through the rolling PR. Don't rebase, merge into, or otherwise touch other branches.
+3. **Update dependencies.** Bring each of these to the latest stable version, applying the compatibility rules below and the exceptions in `AGENTS.md`:
+   - `project/build.properties`: `sbt.version` (`org.scala-sbt:sbt`).
+   - `project/plugins.sbt`: every `addSbtPlugin`. Resolve sbt 2 plugins by their `_sbt2_3` artifact (for example `com.jamesward:sbt-mcp_sbt2_3`).
+   - `build.sbt` (and any other `*.sbt` or `project/*.scala` that holds versions): `scalaVersion`, every library, and the `com.jamesward:skills` Skills dependency.
+   - GitHub Actions versions in `.github/workflows`.
+   - Builds nested in the repo that are part of its tests or examples, such as an `example/` build or `src/sbt-test` fixtures. Leave fixtures that pin old versions on purpose.
+
+   Fold in any open dependency-bump PRs, then close them. After changing `project/build.properties` or `project/plugins.sbt`, reload sbt before validating (`reload` through `sbt-task`, or `./sbt shutdown`).
+
+   How to find versions:
+
    - **Check MCP first.** At the start of the run, note whether the project's sbt-mcp server (named in `AGENTS.md`) and the javadocs.dev tools are available, and say so in the PR description. In Claude Code, MCP tools can be deferred and won't appear in your tool list until you load them with ToolSearch. Search for the server name before concluding that they are missing. If the sbt-mcp server is configured but missing, read `/tmp/sbt-mcp-stdio.log` and `/tmp/sbt-mcp-server.log` and include the cause.
-   - **Find versions with javadocs.dev MCP.** Use `get_latest_version`, which skips prereleases, through the project's sbt-mcp server or the javadocs.dev connector (`https://www.javadocs.dev/mcp`). Use `list_javadoc_symbols`, `get_javadoc_symbol`, `list_source_files` and `get_source_file` to read a new API when migrating code.
+   - **Find versions with javadocs.dev MCP.** Use `get_latest_version`, which skips prereleases, for every artifact, through the project's sbt-mcp server or the javadocs.dev connector (`https://www.javadocs.dev/mcp`). Use the fallback below only for an artifact whose `get_latest_version` call fails. An `sbt-task` failure doesn't make `get_latest_version` unavailable. Use `list_javadoc_symbols`, `get_javadoc_symbol`, `list_source_files` and `get_source_file` to read a new API when migrating code.
    - **Fallback without MCP: Maven metadata.** Maven Central rate-limits shared cloud IPs (HTTP 429), so make few requests, retry, and filter out prereleases. Never use a mirror for this, because mirrors lag new releases.
 
      ```bash
-     latest_stable() { local g="${1%%:*}" a="${1##*:}"; curl -fsS --retry 5 --retry-delay 10 --retry-all-errors "https://repo.maven.apache.org/maven2/${g//.//}/$a/maven-metadata.xml" | grep -o '<version>[^<]*' | sed 's/<version>//' | grep -E '^[0-9]' | grep -viE -- '[-.]?(m|rc|alpha|beta|snapshot|cr|ea|preview|dev|pre)[-.]?[0-9]*([-.]|$)' | sort -V | tail -1; }
-     latest_stable org.scala-sbt:sbt   # prints e.g. 2.0.9; empty output means only prereleases exist
+     latest_stable() { local g="${1%%:*}" a="${1##*:}"; curl -fsS --retry 5 --retry-delay 10 --retry-all-errors "https://repo.maven.apache.org/maven2/${g//.//}/$a/maven-metadata.xml" | grep -o '<version>[^<]*' | sed 's/<version>//' | grep -iE '^[0-9]+(\.[0-9]+)*([.-](final|release|ga|jre|android))?$' | grep -F -- "${2:-}" | grep -E "^${2//./\\.}" | sort -V | tail -1; }
+     latest_stable org.scala-sbt:sbt        # prints e.g. 2.0.9; empty output means only prereleases exist
+     latest_stable org.junit:junit-bom 5.   # latest release within the 5.x line
      ```
 
    - **GitHub Actions versions.** Use `git ls-remote --tags https://github.com/<owner>/<action>`, not the GitHub API. Cloud sessions can only call the API for the repositories attached to the session.
 4. **Align.** Bring the project into line with this Skill, using the version extracted in the bootstrap step. Update `AGENTS.md` where code or workflow has drifted, and remove any text that restates this Skill.
-5. **Validate.** Run the Validation sequence below with the project's commands from `AGENTS.md`. If a bump fails, try to fix it: migrate to the new API, apply the compatibility rules, and re-run validation.
+5. **Validate.** Run the Validation sequence below with the project's commands from `AGENTS.md`. Use the JDK version(s) that CI uses (`java-version` in `.github/workflows`), not just the one that happens to be installed. If that JDK isn't available, install it (for example `apt-get install -y openjdk-8-jdk-headless` or a Temurin build), or treat the PR's CI as the authority and don't merge until it passes. If a bump fails, try to fix it: migrate to the new API, apply the compatibility rules, and re-run validation.
 6. **Publish and merge.** Commit to the rolling PR branch, push, and rewrite the PR description to summarize all changes on the branch. If nothing changed, take no action. Then:
-   - **Merge** (`gh pr merge --squash --delete-branch`, or `gh api -X PUT 'repos/{owner}/{repo}/pulls/<number>/merge' -f merge_method=squash` if GraphQL is blocked) when validation and the PR's CI checks pass, and the branch contains only dependency bumps plus the fixes they needed.
+   - **Merge** (the GitHub tools' merge, `gh api -X PUT 'repos/{owner}/{repo}/pulls/<number>/merge' -f merge_method=squash`, or `gh pr merge --squash --delete-branch` outside the cloud) when local validation passes, the PR's CI checks have run and passed, and the branch contains only dependency bumps plus the fixes they needed. Checks take a while to appear after a push. Poll until they exist and have finished, and never merge while they are missing or pending. If the repository has no workflow that runs on pull requests, say so in the PR and request human review instead of merging.
    - **Request human review** and do not merge when the branch also changes public APIs, behavior, or alignment beyond version bumps, or when `AGENTS.md` requires human review for the kind of change involved. Add the `needs-human` label and say what needs a decision.
    - **Escalate** when a failure cannot be fixed. Leave the PR open and unmerged with the `needs-human` label. Comment with the failing bump, the error, and what was tried. Do not revert the bump just to get a green build.
+
+# All Projects
+
+These apply to every maintained project, whatever its type.
+
+- **CI:** every maintained project has CI. It runs on push to the default branch and on pull requests, with one run per branch at a time:
+
+  ```yaml
+  on:
+    push:
+      branches: [main]   # the default branch
+    pull_request:
+
+  concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+  ```
+
+- **Dependency updates:** the project's `.factory/DAILY.md` routine keeps dependencies current. Don't add Dependabot or Renovate.
+- **Agent tooling lives in the project:** declare Agent Skills in the build (SkillsJars for sbt), and declare MCP servers at the project level (for example sbt-mcp), so every agent and every machine gets the same tools.
+- **Service dependencies:** use Testcontainers for databases, queues and similar services in local development and tests, pinned to the production version (see "Container images track production").
 
 # Scala Projects
 
@@ -103,8 +148,10 @@ The skills dependency is updated first so the rest of the run follows the newest
 - **JDK 24+-only JVM flags.** Flags such as `--sun-misc-unsafe-memory-access=allow` stop Java 21 from starting. Keep them out of `.sbtopts` and `.jvmopts`. Prefer `-Dsun.misc.unsafe.memory.access=allow`, which works on JDK 21 through 25, including in native-packager's `application.ini`. Otherwise add the flag conditionally inside `Def.uncached { ... }`, because sbt 2 caches JDK-dependent task results across JDK switches.
 - **Prereleases only when there is no stable release.** Examples are `dev.zio:zio-direct` 1.0.0-RC7 and Kyo 1.0.0-RC*. Take the newest such release only if the tests pass, and record the exception in `AGENTS.md`.
 - **Intentional pins.** Keep a version that `AGENTS.md` documents as intentionally pinned, such as one used by a bug reproducer.
+- **Container images track production.** A Testcontainers image stands in for a production service, such as a Heroku Postgres or Heroku Key-Value Store (Valkey) add-on. Pin it to the major.minor version that production runs, not to the newest image. Don't bump it during the daily routine. Only change it when `AGENTS.md` records that production moved to a new version. `AGENTS.md` lists each image with the production service and version it mirrors. Floating tags like `8.1` count as pins; don't replace them with exact patch tags.
 - **Deprecations break the build under `-Werror`.** Migrate to the replacement API rather than suppressing the warning. For example, replace `ZIO.done(exit)` with `exit`, and replace a library's deprecated alias with its new name.
 - **Archived or renamed artifacts.** When a dependency is archived or superseded (for example `zio-bedrock-converse` replaced by `zio-bedrock`), migrate to the successor. Do not keep bumping the old artifact.
+- **A new major version can raise the required JDK.** Before taking a major bump, check its minimum Java version: release notes, the published POM's `<prerequisites>`, or the class file version. JUnit 6 and Spring Boot 4 require Java 17, for example. If that is above the project's documented Java baseline (see `AGENTS.md`), stay on the newest release of the current major line (`latest_stable <group:artifact> <major>.`) and record why in `AGENTS.md`. This applies to test frameworks and build plugins too, because they run on the build JDK.
 - If a bump breaks the build and cannot reasonably be fixed, follow the escalation step in the Daily Routine.
 
 ## Build structure and launchers
@@ -204,7 +251,7 @@ libraryDependencies += "com.jamesward" % "skills" % "<latest stable version>" % 
 
 ## Dependencies
 
-- Explicit dependencies should normally be only the outermost dependencies the project directly uses. Do not repeat transitive dependencies merely to synchronize versions.
+- Don't declare transitive dependencies explicitly. Explicit dependencies are only the outermost ones the project's code uses directly. Don't repeat a transitive dependency just to pin or synchronize its version. Remove a dependency the code no longer imports.
 - If an explicit dependency must use the version supplied by a transitive dependency, use [sbt-tdepver](https://github.com/jamesward/sbt-tdepver).
 
 ## New Bootstrap
@@ -297,6 +344,22 @@ libraryDependencies += "com.jamesward" % "skills" % "<latest stable version>" % 
   versionScheme := Some("semver-spec")
   ```
 
+## sbt Plugin Projects
+
+sbt plugins are libraries, so the Library Projects rules apply, plus:
+
+- Build the plugin with sbt's own Scala version, not the newest Scala (see "Compatibility rules for upgrades").
+- Test with sbt's scripted framework (`src/sbt-test`), and have CI run `scripted`.
+- Plugins cross-built for sbt 1 and sbt 2 run the scripted tests for both, or document in `AGENTS.md` which one they cover.
+
+## Code Sample Projects
+
+Samples (`hello-*`, demos) exist to show an API, so keep them small and readable.
+
+- CI validates compilation at least (`Test / compile`), plus tests when there are any.
+- Don't publish them. Runs that call paid services are manual and documented in `AGENTS.md`, never part of CI or the daily routine.
+- Keep the sample current with the library it demonstrates. When that library is renamed or archived, migrate the sample to its successor.
+
 ## Maven Central Badge
 
 Every project that publishes an artifact to Maven Central, including libraries and sbt plugins, puts a javadocs.dev badge directly under the title in `README.md`:
@@ -328,3 +391,99 @@ A typical application validation sequence is:
 ./sbt extractSkillsJars
 ./sbt "Test / compile; testFull; stage"
 ```
+
+# Maven and Gradle Projects
+
+Maven and Gradle projects follow the same approach as sbt projects: a pinned wrapper, the latest stable versions, strict compilation, build-defined Skills, project-level MCP, and the same Daily Routine. The differences:
+
+## Shared
+
+- **Java:** Java 21 LTS unless `AGENTS.md` records a reason for something else (for example a library that still targets Java 8). Compile with a toolchain or `--release`, never with whatever JDK happens to be installed.
+- **Wrappers:** commit the wrapper and keep it current. Use `mvnw`, `mvnw.cmd` and `.mvn/wrapper/` for Maven, and `gradlew`, `gradlew.bat` and `gradle/wrapper/` for Gradle. Commit the POSIX executable bit. Always build through the wrapper.
+- **Strict compilation:** warnings fail the build. For Java, use `-Xlint:all -Werror` (add `-Xlint:-processing` if annotation processors are noisy). For Kotlin, use `allWarningsAsErrors`. Fix deprecations rather than suppressing them.
+  - **Old Java targets:** when a library targets an old Java version (for example 8), javac warns that the source/target is obsolete. Add `-Xlint:-options` for that warning only. `--release 8` can fail under `-Werror` when a dependency annotates element types that Java 8 lacks (jspecify's `@NullMarked` on modules, for example). In that case use `-source`/`-target` and record it in `AGENTS.md`. JDK 8's javac also warns `unknown enum constant ElementType.MODULE` for such annotations, and no `-Xlint` option suppresses that. If CI builds on JDK 8, enable `-Werror` only on newer JDKs, through a Maven profile activated on `<jdk>[9,)</jdk>` or a Gradle condition on the toolchain. Verify any Java-target exception with a strict build on every JDK that CI uses before writing it down.
+- **MCP:** there is no sbt-mcp, so register the javadocs.dev MCP server directly as `javadocs`, and record it in `AGENTS.md`:
+  - `.mcp.json` (Claude Code):
+
+    ```json
+    { "mcpServers": { "javadocs": { "type": "http", "url": "https://www.javadocs.dev/mcp" } } }
+    ```
+
+  - `.claude/settings.json`: `{ "enabledMcpjsonServers": ["javadocs"] }`
+  - `.kiro/settings/mcp.json` (Kiro): the same `javadocs` entry, with `"type": "http"` and that URL.
+- **SkillsJars:** extract to `.kiro/skills` and add `.kiro/skills/` to `.gitignore`, the same as for sbt. The plugin and command differ per build tool; see below.
+- **Version gotchas:** only plain numeric versions count as releases, optionally with a release qualifier such as `.Final`, `.RELEASE`, `-jre` or `-android`. Treat anything else (`-M1`, `-RC2`, `.dirty`, `-beta`, ...) as unreleased, even when `get_latest_version` or Maven metadata reports it as latest. For example, `com.skillsjars:gradle-plugin` reports `0.1.4.dirty`; the release is `0.1.4`.
+- **Spring Boot:** for local development against real services, use `spring-boot-testcontainers` with a test-scoped main (`TestApplication`) run by `./mvnw spring-boot:test-run` or `./gradlew bootTestRun`. This is the Spring equivalent of `AppTest` in "Testcontainers and test-scoped development".
+
+## Maven
+
+- **Versions:** pin every plugin version, including the build defaults (compiler, surefire, jar, install, deploy and so on), and keep shared versions in `<properties>`. Set `<maven.compiler.release>21</maven.compiler.release>`.
+- **Wrapper:** update with `./mvnw wrapper:wrapper -Dmaven=<version>`. The latest Maven is the latest stable `org.apache.maven:apache-maven`.
+- **Compiler:**
+
+  ```xml
+  <plugin>
+    <artifactId>maven-compiler-plugin</artifactId>
+    <version><!-- latest stable --></version>
+    <configuration>
+      <compilerArgs><arg>-Xlint:all</arg><arg>-Werror</arg></compilerArgs>
+    </configuration>
+  </plugin>
+  ```
+
+- **SkillsJars:** add `com.skillsjars:maven-plugin` with the Skills as plugin dependencies, so they stay off the project's classpath:
+
+  ```xml
+  <plugin>
+    <groupId>com.skillsjars</groupId>
+    <artifactId>maven-plugin</artifactId>
+    <version><!-- latest stable --></version>
+    <configuration><dir>.kiro/skills</dir></configuration>
+    <dependencies>
+      <dependency>
+        <groupId>com.jamesward</groupId>
+        <artifactId>skills</artifactId>
+        <version><!-- latest stable --></version>
+      </dependency>
+    </dependencies>
+  </plugin>
+  ```
+
+  Extract with `./mvnw -q skillsjars:extract`.
+- **Validation:** `./mvnw -B -ntp verify`.
+
+## Gradle
+
+- **Build files:** use the Kotlin DSL. When `gradle/libs.versions.toml` exists, versions live there; otherwise they live in the build files.
+- **Wrapper:** update with `./gradlew wrapper --gradle-version <version>`, then run `./gradlew wrapper` once more so the wrapper jar and scripts update too. The current Gradle release is the `version` field of `https://services.gradle.org/versions/current`.
+- **Plugins:** many Gradle plugins are published only to the Gradle Plugin Portal, which javadocs.dev doesn't index. Find their latest version in `https://plugins.gradle.org/m2/<plugin id with . as />/<plugin id>.gradle.plugin/maven-metadata.xml`, applying the version gotchas above.
+- **Toolchain and compiler:**
+
+  ```kotlin
+  java { toolchain { languageVersion = JavaLanguageVersion.of(21) } }   // or kotlin { jvmToolchain(21) }
+  tasks.withType<JavaCompile> { options.compilerArgs.addAll(listOf("-Xlint:all", "-Werror")) }
+  kotlin { compilerOptions { allWarningsAsErrors = true } }               // Kotlin projects
+  ```
+
+  Keep the `org.gradle.toolchains.foojay-resolver-convention` plugin in `settings.gradle.kts`, so the toolchain can be downloaded.
+- **SkillsJars:** apply the `com.skillsjars.gradle-plugin` plugin:
+
+  ```kotlin
+  plugins { id("com.skillsjars.gradle-plugin") version "<latest stable>" }
+  skillsjars { outputDir.set(layout.projectDirectory.dir(".kiro/skills")) }
+  dependencies { skill("com.jamesward:skills:<latest stable>") }
+  ```
+
+  Extract with `./gradlew extractSkillsJars`.
+- **Validation:** `./gradlew build`.
+
+# Website Projects (draft)
+
+> **Draft.** This is a starting point, taken from the ai4jvm.com routine. It will be filled out once every maintained website is covered, and then given automation like the sbt projects have.
+
+- **Daily routine:** until websites have a shared bootstrap like the sbt one, each site's `.factory/DAILY.md` lists its own tasks. It must still include the open-PR instruction from "`.factory/DAILY.md`" and send all changes as a single rolling PR.
+- **Content:** keep the site current. Add missing, important items that conform to the site's governance or content policy, and send them through a PR.
+- **SEO:** find a well-regarded SEO Skill, vet it, and use it to improve the site's SEO.
+- **Agent readiness:** check the site with https://isitagentready.com and fix what applies. Skip authentication-related checks for public sites.
+- **Performance:** check the site with https://pagespeed.web.dev and fix the issues it reports.
+- **Hosting and infrastructure** live as IaC in a separate repository (for example `jamesward/domains`); note it in `AGENTS.md`.

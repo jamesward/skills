@@ -221,3 +221,21 @@ the entry via `.onExit`.
   fix.
 - Guard expensive/paid integration paths (e.g. anything hitting a metered API
   key): run them very sparingly and keep them out of the default test task.
+
+## Dependencies
+
+- Don't declare transitive dependencies explicitly. Depend only on the libraries your code imports. Let the build resolve everything they pull in, and don't re-declare a transitive dependency just to pin its version. If an explicit dependency must follow a transitive one's version, use sbt-tdepver (see the `zen-of-projects` skill).
+
+## Concurrency: Virtual Threads
+
+- Use virtual threads (Java 21+) for blocking work instead of platform-thread pools.
+- In ZIO apps, run blocking effects (`ZIO.attemptBlocking`, JDBC, blocking clients) on a Loom-based blocking executor, enabled in `bootstrap`:
+
+  ```scala
+  object App extends ZIOAppDefault:
+    override val bootstrap = Runtime.enableLoomBasedBlockingExecutor // ++ other bootstrap layers
+  ```
+
+  Enable it in `AppTest` (the dev/test main) as well, so development matches production.
+- Outside ZIO, use `Executors.newVirtualThreadPerTaskExecutor()` rather than a fixed thread pool. Don't pool virtual threads.
+- Virtual threads don't make CPU-bound work faster. Keep that work on ZIO's default executor.
