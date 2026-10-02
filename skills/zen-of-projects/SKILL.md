@@ -9,18 +9,20 @@ description: Whether creating new projects or bringing existing ones into compli
 
 Say each thing once and reference it elsewhere:
 
-- **This Skill** owns general conventions, compatibility rules, the validation sequence, and the daily routine.
+- **This Skill** owns general conventions, compatibility rules, the validation sequence, and the maintenance routine.
 - **`AGENTS.md`** owns project facts only: what the project is, which Skills apply, exact build/test/dev commands, the MCP server name and port, gated or paid tests, and every **exception** to this Skill together with its reason (for example a required Java version, an allowed prerelease, or an intentional pin). Do not restate this Skill's general rules in `AGENTS.md`; write "Follow the `zen-of-projects` Skill" and record only what differs or is unique.
-- **`.factory/DAILY.md`** is the bootstrap below, verbatim. It contains no project-specific content.
+- **`.factory/MAINTENANCE.md`** is the bootstrap below, verbatim. It contains no project-specific content.
 
 When they disagree, this Skill wins for general conventions and `AGENTS.md` wins for its documented exceptions. Fix the drift in the same change rather than leaving two versions.
 
-## `.factory/DAILY.md`
+## `.factory/MAINTENANCE.md`
+
+The file is the same however often the routine runs. How often each repo's routine runs is set outside the repo, in the routine's schedule. Older repos may still have it as `.factory/DAILY.md`; rename it to `.factory/MAINTENANCE.md`.
 
 Use exactly this content:
 
 ````markdown
-# Daily Routine
+# Maintenance Routine
 
 If there are other open PRs for this work, update that PR instead of creating a new one.
 
@@ -60,7 +62,7 @@ If there are other open PRs for this work, update that PR instead of creating a 
    `.kiro/skills/` is gitignored, so it doesn't exist until this runs. If the build can't download
    artifacts (for example HTTP 429 or a proxy 403), stop and report the error instead of changing
    resolvers.
-3. Read `.kiro/skills/*zen-of-projects*/SKILL.md` and follow its "Daily Routine" section, using
+3. Read `.kiro/skills/*zen-of-projects*/SKILL.md` and follow its "Maintenance Routine" section, using
    `AGENTS.md` for this project's commands and documented exceptions. While an unreleased version of
    the Skill is being tested, `.factory/skills/zen-of-projects/SKILL.md` exists. Read that file
    instead, and don't delete it.
@@ -68,17 +70,17 @@ If there are other open PRs for this work, update that PR instead of creating a 
 
 The skills dependency is updated first so the rest of the run follows the newest version of this Skill.
 
-## Daily Routine
+## Maintenance Routine
 
-1. **Find the rolling PR first.** Look for an open PR whose title starts with `Daily maintenance:`. Also match the legacy prefix `Agent alignment:`:
+1. **Find the rolling PR first.** Look for an open PR whose title starts with `Maintenance:`. Also match the legacy prefixes `Daily maintenance:` and `Agent alignment:`:
 
    ```bash
-   gh pr list --state open --search 'in:title "Daily maintenance:" OR in:title "Agent alignment:"'
+   gh pr list --state open --search 'in:title "Maintenance:" OR in:title "Daily maintenance:" OR in:title "Agent alignment:"'
    ```
 
-   In Claude Code cloud sessions, `gh` commands that use GraphQL (`gh pr list`, `gh pr merge`, ...) fail with `HTTP 403: GitHub GraphQL is not available`. Use the built-in GitHub tools (`mcp__github__*`, loaded with ToolSearch) or the REST API instead, for example `gh api 'repos/{owner}/{repo}/pulls?state=open' --jq '.[] | select(.title | test("^(Daily maintenance|Agent alignment):")) | [.number, .head.ref, .created_at] | @tsv'`.
+   In Claude Code cloud sessions, `gh` commands that use GraphQL (`gh pr list`, `gh pr merge`, ...) fail with `HTTP 403: GitHub GraphQL is not available`. Use the built-in GitHub tools (`mcp__github__*`, loaded with ToolSearch) or the REST API instead, for example `gh api 'repos/{owner}/{repo}/pulls?state=open' --jq '.[] | select(.title | test("^(Maintenance|Daily maintenance|Agent alignment):")) | [.number, .head.ref, .created_at] | @tsv'`.
 
-   Reuse the oldest match and check out its branch. Close any other matches as duplicates. Create a branch only when there is no match. New PRs use the `Daily maintenance:` prefix and the `daily-maintenance` label, and target the repository's default branch.
+   Reuse the oldest match and check out its branch. Close any other matches as duplicates. Create a branch only when there is no match. New PRs use the `Maintenance:` prefix and the `maintenance` label, and target the repository's default branch.
 2. **Preserve existing work.** Build on the PR branch and any uncommitted changes. Never reset, force-push over, or discard them. Work only from the repository's default branch, through the rolling PR. Don't rebase, merge into, or otherwise touch other branches.
 3. **Update dependencies.** Bring each of these to the latest stable version, applying the compatibility rules below and the exceptions in `AGENTS.md`:
    - `project/build.properties`: `sbt.version` (`org.scala-sbt:sbt`).
@@ -126,7 +128,7 @@ These apply to every maintained project, whatever its type.
     cancel-in-progress: true
   ```
 
-- **Dependency updates:** the project's `.factory/DAILY.md` routine keeps dependencies current. Don't add Dependabot or Renovate.
+- **Dependency updates:** the project's `.factory/MAINTENANCE.md` routine keeps dependencies current. Don't add Dependabot or Renovate.
 - **Agent tooling lives in the project:** declare Agent Skills in the build (SkillsJars for sbt), and declare MCP servers at the project level (for example sbt-mcp), so every agent and every machine gets the same tools.
 - **Service dependencies:** use Testcontainers for databases, queues and similar services in local development and tests, pinned to the production version (see "Container images track production").
 
@@ -148,11 +150,11 @@ These apply to every maintained project, whatever its type.
 - **JDK 24+-only JVM flags.** Flags such as `--sun-misc-unsafe-memory-access=allow` stop Java 21 from starting. Keep them out of `.sbtopts` and `.jvmopts`. Prefer `-Dsun.misc.unsafe.memory.access=allow`, which works on JDK 21 through 25, including in native-packager's `application.ini`. Otherwise add the flag conditionally inside `Def.uncached { ... }`, because sbt 2 caches JDK-dependent task results across JDK switches.
 - **Prereleases only when there is no stable release.** Examples are `dev.zio:zio-direct` 1.0.0-RC7 and Kyo 1.0.0-RC*. Take the newest such release only if the tests pass, and record the exception in `AGENTS.md`.
 - **Intentional pins.** Keep a version that `AGENTS.md` documents as intentionally pinned, such as one used by a bug reproducer.
-- **Container images track production.** A Testcontainers image stands in for a production service, such as a Heroku Postgres or Heroku Key-Value Store (Valkey) add-on. Pin it to the major.minor version that production runs, not to the newest image. Don't bump it during the daily routine. Only change it when `AGENTS.md` records that production moved to a new version. `AGENTS.md` lists each image with the production service and version it mirrors. Floating tags like `8.1` count as pins; don't replace them with exact patch tags.
+- **Container images track production.** A Testcontainers image stands in for a production service, such as a Heroku Postgres or Heroku Key-Value Store (Valkey) add-on. Pin it to the major.minor version that production runs, not to the newest image. Don't bump it during the maintenance routine. Only change it when `AGENTS.md` records that production moved to a new version. `AGENTS.md` lists each image with the production service and version it mirrors. Floating tags like `8.1` count as pins; don't replace them with exact patch tags.
 - **Deprecations break the build under `-Werror`.** Migrate to the replacement API rather than suppressing the warning. For example, replace `ZIO.done(exit)` with `exit`, and replace a library's deprecated alias with its new name.
 - **Archived or renamed artifacts.** When a dependency is archived or superseded (for example `zio-bedrock-converse` replaced by `zio-bedrock`), migrate to the successor. Do not keep bumping the old artifact.
 - **A new major version can raise the required JDK.** Before taking a major bump, check its minimum Java version: release notes, the published POM's `<prerequisites>`, or the class file version. JUnit 6 and Spring Boot 4 require Java 17, for example. If that is above the project's documented Java baseline (see `AGENTS.md`), stay on the newest release of the current major line (`latest_stable <group:artifact> <major>.`) and record why in `AGENTS.md`. This applies to test frameworks and build plugins too, because they run on the build JDK.
-- If a bump breaks the build and cannot reasonably be fixed, follow the escalation step in the Daily Routine.
+- If a bump breaks the build and cannot reasonably be fixed, follow the escalation step in the Maintenance Routine.
 
 ## Build structure and launchers
 
@@ -357,7 +359,7 @@ sbt plugins are libraries, so the Library Projects rules apply, plus:
 Samples (`hello-*`, demos) exist to show an API, so keep them small and readable.
 
 - CI validates compilation at least (`Test / compile`), plus tests when there are any.
-- Don't publish them. Runs that call paid services are manual and documented in `AGENTS.md`, never part of CI or the daily routine.
+- Don't publish them. Runs that call paid services are manual and documented in `AGENTS.md`, never part of CI or the maintenance routine.
 - Keep the sample current with the library it demonstrates. When that library is renamed or archived, migrate the sample to its successor.
 
 ## Maven Central Badge
@@ -394,7 +396,7 @@ A typical application validation sequence is:
 
 # Maven and Gradle Projects
 
-Maven and Gradle projects follow the same approach as sbt projects: a pinned wrapper, the latest stable versions, strict compilation, build-defined Skills, project-level MCP, and the same Daily Routine. The differences:
+Maven and Gradle projects follow the same approach as sbt projects: a pinned wrapper, the latest stable versions, strict compilation, build-defined Skills, project-level MCP, and the same Maintenance Routine. The differences:
 
 ## Shared
 
@@ -481,7 +483,7 @@ Maven and Gradle projects follow the same approach as sbt projects: a pinned wra
 
 > **Draft.** This is a starting point, taken from the ai4jvm.com routine. It will be filled out once every maintained website is covered, and then given automation like the sbt projects have.
 
-- **Daily routine:** until websites have a shared bootstrap like the sbt one, each site's `.factory/DAILY.md` lists its own tasks. It must still include the open-PR instruction from "`.factory/DAILY.md`" and send all changes as a single rolling PR.
+- **Maintenance routine:** until websites have a shared bootstrap like the sbt one, each site's `.factory/MAINTENANCE.md` lists its own tasks. It must still include the open-PR instruction from "`.factory/DAILY.md`" and send all changes as a single rolling PR.
 - **Content:** keep the site current. Add missing, important items that conform to the site's governance or content policy, and send them through a PR.
 - **SEO:** find a well-regarded SEO Skill, vet it, and use it to improve the site's SEO.
 - **Agent readiness:** check the site with https://isitagentready.com and fix what applies. Skip authentication-related checks for public sites.
