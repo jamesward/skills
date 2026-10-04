@@ -207,6 +207,11 @@ mcpPort := 5015 // Replace once with this project's chosen available port.
   3. Start a long-lived sbt session and keep it running while the MCP client uses the server. A one-shot `mcpInstall` process does not keep the server alive.
   4. Reconnect or reinitialize the MCP client after the server is running so it reloads the tool list.
 - Record the MCP server name and expected tool workflow in `AGENTS.md`. Agents should use MCP for sbt tasks and Scala/classpath symbol inspection when it is available, and clearly state when they must fall back to the project launcher.
+- **Using `sbt-task` for tests:**
+  - A failing `test`, `testOnly` or `testFull` reports each failed test's name and assertion message (sbt-mcp 0.1.4+). Read them in the response; don't switch to `./sbt` to see the failure. Test stdout (`println`) isn't included. The JUnit XML under `target/**/test-reports/` has the full output.
+  - sbt 2 caches test results: an unchanged test that passed before is skipped, so a run that takes about a second may have run nothing. Use `testFull` (or `testOnly` after a change) when a real run is needed.
+  - `set ...`, `reload` and edits to `build.sbt` reload the build, which restarts the sbt-mcp server. The in-flight call can come back as a lost connection; call it again. Don't change settings with `set` to work around missing output.
+  - Right after sbt starts, `sbt-task` can answer `no sbt channel available yet`. Wait a few seconds and retry.
 - sbt 2.x uses a persistent daemon. After changing environment variables or JVM `-D` properties, stop it before the next build so the new process receives those values:
 
 ```bash
