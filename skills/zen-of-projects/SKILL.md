@@ -112,6 +112,12 @@ The skills dependency is updated first so the rest of the run follows the newest
    - **Merge** (the GitHub tools' merge, `gh api -X PUT 'repos/{owner}/{repo}/pulls/<number>/merge' -f merge_method=squash`, or `gh pr merge --squash --delete-branch` outside the cloud) when local validation passes, the PR's CI checks have run and passed, and the branch contains only dependency bumps plus the fixes they needed. Checks take a while to appear after a push. Poll until they exist and have finished, and never merge while they are missing or pending. If the repository has no workflow that runs on pull requests, say so in the PR and request human review instead of merging.
    - **Request human review** and do not merge when the branch also changes public APIs, behavior, or alignment beyond version bumps, or when `AGENTS.md` requires human review for the kind of change involved. Add the `needs-human` label and say what needs a decision.
    - **Escalate** when a failure cannot be fixed. Leave the PR open and unmerged with the `needs-human` label. Comment with the failing bump, the error, and what was tried. Do not revert the bump just to get a green build.
+7. **Improve the factory.** Before ending, review the run itself: tool friction (MCP fallbacks, retries, timeouts, output a tool didn't return), instructions that were missing, unclear or wrong, and anything you had to guess. For each finding, decide where the fix belongs:
+   - **Only this project:** a note in its `AGENTS.md`, on the rolling PR.
+   - **Every project:** this Skill, in `jamesward/skills` (`skills/zen-of-projects/SKILL.md`, or the other `skills/*/SKILL.md`).
+   - **The factory itself:** setup, scripts or schedules, in `jamesward/projects` (`FACTORY.md` and the `factory-*` scripts).
+
+   For the last two, call the `add_repo` tool (load it with ToolSearch) with `access: "push"`, then clone the repo as its result says, one clone at a time. Look for an open PR there whose title starts with `Factory improvement:` and covers the same finding. Add to it if there is one; otherwise open one from a `claude/` branch with the `factory-improvement` label. Describe the evidence (quote errors, link this run's PR) and the proposed change. Never merge these PRs, and don't change other files in those repos. Fixes to other tools (sbt-mcp, the SkillsJars plugins, ...) go in the PR description as suggestions only. If the run went smoothly, skip this step. Either way, list the findings, or "none", in the rolling PR's description.
 
 # All Projects
 
