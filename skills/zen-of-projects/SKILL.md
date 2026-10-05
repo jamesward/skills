@@ -91,6 +91,8 @@ The skills dependency is updated first so the rest of the run follows the newest
    - GitHub Actions versions in `.github/workflows`.
    - Builds nested in the repo that are part of its tests or examples, such as an `example/` build or `src/sbt-test` fixtures. Leave fixtures that pin old versions on purpose.
 
+   **Security alerts.** Read the open Dependabot alerts: `gh api 'repos/{owner}/{repo}/dependabot/alerts?state=open' --jq '.[] | [.number, .security_advisory.severity, .dependency.package.name, .security_vulnerability.first_patched_version.identifier, .security_advisory.summary] | @tsv'`. Fix each one in the rolling PR by moving to a patched version. Where the patched version breaks a documented exception (for example it needs a newer Java than the project targets), or no patch exists, don't force it: list the alert in the PR description and add the `needs-human` label. Alerts close themselves once the fix reaches the default branch. Dependabot alerts stay on, but Dependabot security update PRs are off: this step replaces them.
+
    Fold in any open dependency-bump PRs, then close them. If a just-released version fails to resolve with "Not found", it hasn't reached every mirror yet: use the newest version that does resolve for this run and note it, rather than reporting a rate limit or failing the run. After changing `project/build.properties` or `project/plugins.sbt`, reload sbt before validating (`reload` through `sbt-task`, or `./sbt shutdown`).
 
    How to find versions:
@@ -136,7 +138,7 @@ These apply to every maintained project, whatever its type.
     cancel-in-progress: true
   ```
 
-- **Dependency updates:** the project's `.factory/MAINTENANCE.md` routine keeps dependencies current. Don't add Dependabot or Renovate.
+- **Dependency updates:** the project's `.factory/MAINTENANCE.md` routine keeps dependencies current and fixes Dependabot alerts. Don't add Dependabot version or security update PRs, or Renovate; keep Dependabot alerts on.
 - **Agent tooling lives in the project:** declare Agent Skills in the build (SkillsJars for sbt), and declare MCP servers at the project level (for example sbt-mcp), so every agent and every machine gets the same tools.
 - **Service dependencies:** use Testcontainers for databases, queues and similar services in local development and tests, pinned to the production version (see "Container images track production").
 
