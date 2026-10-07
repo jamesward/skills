@@ -26,6 +26,12 @@ Use exactly this content:
 
 If there are other open PRs for this work, update that PR instead of creating a new one.
 
+Whenever a step says to stop, or the run can't finish: revert your uncommitted edits
+(`git checkout -- .`), don't push a branch or open a PR, and end with a report that quotes what
+failed. A cloud session's Stop hook asks you to commit uncommitted changes; don't commit unvalidated
+work to satisfy it. Don't send push notifications: the routine emails its result, and your final
+reply is the report.
+
 0. Load the project's MCP tools before anything else. `AGENTS.md` names the MCP server:
    `sbt-mcp-<project>` for sbt projects, `javadocs` for Maven and Gradle projects. In Claude Code
    these tools are deferred, so load them with ToolSearch (search for the server name). They include
@@ -182,7 +188,8 @@ These apply to every maintained project, whatever its type.
 
 - Use sbt's default resolvers: Maven Central plus the `local` Ivy repository. Never commit resolver configuration to a project. That rules out a `project/repositories` file, `-Dsbt.repository.config` or `-Dsbt.override.build.repos` in `.sbtopts` or `.jvmopts`, mirror URLs, and `Resolver.mavenLocal`, `Resolver.file`, or `file://` resolvers in the build.
 - To test against an unpublished artifact, use `publishLocal`. The `local` Ivy repository is already a default resolver, so no resolver change is needed. If a test really needs another resolver, keep it ephemeral: pass it for that one invocation (for example `./sbt 'set resolvers += Resolver.mavenLocal' test`) and make sure it is not in the committed diff.
-- Mirrors are environment configuration. An automated environment that gets rate-limited by Maven Central can put a mirror first in the user-level `~/.sbt/repositories`, with Maven Central as the fallback, and add `-Dsbt.override.build.repos=true` to the user-level `~/.config/sbt/sbtopts`:
+- Mirrors are environment configuration, for every build tool. Gradle and Maven projects follow the same rule: no mirror URLs or extra repositories committed for it. An environment can prefer a mirror with a user-level Gradle init script (`~/.gradle/init.d/*.init.gradle.kts` that adds the mirror first to the build's existing repositories) or a user-level Maven `~/.m2/settings.xml` profile (activated by default) whose repository and plugin repository is the mirror; Maven Central stays the fallback in both.
+- An automated environment that gets rate-limited by Maven Central can put a mirror first in the user-level `~/.sbt/repositories`, with Maven Central as the fallback, and add `-Dsbt.override.build.repos=true` to the user-level `~/.config/sbt/sbtopts`:
 
   ```text
   [repositories]
