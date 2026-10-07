@@ -82,7 +82,7 @@ The skills dependency is updated first so the rest of the run follows the newest
 
    In Claude Code cloud sessions, `gh` commands that use GraphQL (`gh pr list`, `gh pr merge`, ...) fail with `HTTP 403: GitHub GraphQL is not available`. Use the built-in GitHub tools (`mcp__github__*`, loaded with ToolSearch) or the REST API instead, for example `gh api 'repos/{owner}/{repo}/pulls?state=open' --jq '.[] | select(.title | test("^(Maintenance|Daily maintenance|Agent alignment):")) | [.number, .head.ref, .created_at] | @tsv'`.
 
-   Reuse the oldest match and check out its branch. Close any other matches as duplicates. Create a branch only when there is no match. New PRs use the `Maintenance:` prefix and the `maintenance` label, and target the repository's default branch.
+   Reuse the oldest match and check out its branch. Close any other matches as duplicates. Create a branch only when there is no match. New PRs use the `Maintenance:` prefix and the `maintenance` label, and target the repository's default branch. Don't assume it's `main` (some repos use `master`): read it with `gh api 'repos/{owner}/{repo}' --jq .default_branch` or `git remote show origin`, and use it for the PR base and for every branch reference in this routine.
 2. **Preserve existing work.** Build on the PR branch and any uncommitted changes. Never reset, force-push over, or discard them. Work only from the repository's default branch, through the rolling PR. Don't rebase, merge into, or otherwise touch other branches.
 3. **Update dependencies.** Bring each of these to the latest stable version, applying the compatibility rules below and the exceptions in `AGENTS.md`:
    - `project/build.properties`: `sbt.version` (`org.scala-sbt:sbt`).
@@ -109,7 +109,7 @@ The skills dependency is updated first so the rest of the run follows the newest
 
    - **GitHub Actions versions.** Use `git ls-remote --tags https://github.com/<owner>/<action>`, not the GitHub API. Cloud sessions can only call the API for the repositories attached to the session.
 4. **Align.** Bring the project into line with this Skill, using the version extracted in the bootstrap step. Update `AGENTS.md` where code or workflow has drifted, and remove any text that restates this Skill.
-5. **Validate.** Run the Validation sequence below with the project's commands from `AGENTS.md`. Use the JDK version(s) that CI uses (`java-version` in `.github/workflows`), not just the one that happens to be installed. If that JDK isn't available, install it (for example `apt-get install -y openjdk-8-jdk-headless` or a Temurin build), or treat the PR's CI as the authority and don't merge until it passes. If a bump fails, try to fix it: migrate to the new API, apply the compatibility rules, and re-run validation.
+5. **Validate.** Run the project's full validation command from `AGENTS.md` exactly as written (for example `Test / compile; testFull; stage`), following the Validation sequence below. Don't drop the tests from it: compiling and staging isn't validation. If the project needs Docker, start it first (see "Docker for tests" in All Projects). Use the JDK version(s) that CI uses (`java-version` in `.github/workflows`), not just the one that happens to be installed. If that JDK isn't available, install it (for example `apt-get install -y openjdk-8-jdk-headless` or a Temurin build), or treat the PR's CI as the authority and don't merge until it passes. If a bump fails, try to fix it: migrate to the new API, apply the compatibility rules, and re-run validation.
 6. **Publish and merge.** Commit to the rolling PR branch, push, and rewrite the PR description to summarize all changes on the branch. If nothing changed, take no action. Then:
    - **Merge** (the GitHub tools' merge, `gh api -X PUT 'repos/{owner}/{repo}/pulls/<number>/merge' -f merge_method=squash`, or `gh pr merge --squash --delete-branch` outside the cloud) when local validation passes, the PR's CI checks have run and passed, and the branch contains only dependency bumps plus the fixes they needed. Checks take a while to appear after a push. Poll until they exist and have finished, and never merge while they are missing or pending. If the repository has no workflow that runs on pull requests, say so in the PR and request human review instead of merging.
    - **Request human review** and do not merge when the branch also changes public APIs, behavior, or alignment beyond version bumps, or when `AGENTS.md` requires human review for the kind of change involved. Add the `needs-human` label and say what needs a decision.
@@ -141,6 +141,13 @@ These apply to every maintained project, whatever its type.
 - **Dependency updates:** the project's `.factory/MAINTENANCE.md` routine keeps dependencies current and fixes Dependabot alerts. Don't add Dependabot version or security update PRs, or Renovate; keep Dependabot alerts on.
 - **Agent tooling lives in the project:** declare Agent Skills in the build (SkillsJars for sbt), and declare MCP servers at the project level (for example sbt-mcp), so every agent and every machine gets the same tools.
 - **Service dependencies:** use Testcontainers for databases, queues and similar services in local development and tests, pinned to the production version (see "Container images track production").
+- **Docker for tests:** a project needs Docker when its build depends on Testcontainers (for example `org.testcontainers` or `testcontainers-scala` in `build.sbt`, `project/*.scala`, `pom.xml` or `build.gradle.kts`) or `AGENTS.md` says its tests do. Projects that don't need Docker skip this. Before running the tests of one that does, make sure the daemon is up:
+
+  ```bash
+  docker info >/dev/null 2>&1 || { mkdir -p /var/log/docker; nohup dockerd > /var/log/docker/dockerd.log 2>&1 & disown; for i in $(seq 1 30); do docker info >/dev/null 2>&1 && break; sleep 2; done; docker info >/dev/null 2>&1 || tail -20 /var/log/docker/dockerd.log; }
+  ```
+
+  In Claude Code cloud sessions Docker is installed but not running, and its init script fails (`ulimit: error setting limit (Operation not permitted)`), so start `dockerd` directly as above. Pulling images needs the environment's network access set to **Full**; a TLS or network error on `docker pull` usually means it isn't. If Docker still can't start, say so and quote the log; don't skip or disable the Docker-backed tests, and don't merge on local results alone: let CI run them.
 
 # Scala Projects
 
@@ -396,7 +403,7 @@ After creating or changing the build:
 1. Run `./sbt shutdown` first when environment variables, JVM `-D` properties, or daemon-sensitive configuration changed.
 2. Run `./sbt extractSkillsJars` and verify the generated Skills are ignored.
 3. Compile main and test sources with the strict compiler options enabled.
-4. Run the complete non-metered test suite. Testcontainers needs a Docker daemon. If `docker info` fails in a cloud session (where Docker is installed but not running), start it with `dockerd > /tmp/dockerd.log 2>&1 &` and wait until `docker info` succeeds. Don't skip Docker-backed tests because of it. Prefer `testFull` in CI when a guaranteed full sbt 2 test run is required rather than an incremental cached run.
+4. Run the complete non-metered test suite. If the project needs Docker, start it first (see "Docker for tests" in All Projects). Prefer `testFull` in CI when a guaranteed full sbt 2 test run is required rather than an incremental cached run.
 5. For server applications, run `stage` and a minimal startup or health-check smoke test.
 6. Keep paid, metered, or destructive integration suites out of the default validation path; gate them explicitly and run them only when requested.
 7. Fix all validation failures before declaring the project compliant. If a required check cannot run, document the blocker and the closest successful check.
