@@ -61,11 +61,58 @@ is not repeated here.
 - Keep dev-only and test-only code in `src/test`. `src/main` is production
   only; this prevents accidental backdoors and dev shortcuts shipping.
 
-### Serialization
+### Serialization: typed models, not JSON AST
 
-- Prefer `case class` + a derived `zio-schema` `Schema` and derived codecs over
-  hand-rolling JSON AST marshalling/unmarshalling. Deriving keeps the wire
-  format in sync with the type and removes a class of stringly-typed bugs.
+Model every JSON shape the code knows (request and response bodies, API
+payloads, config, files, MCP tool inputs and outputs, test fixtures) as a
+`case class` or `enum` that `derives Schema`, and let the codec come from the
+schema. Don't build or pick apart `zio.json.ast.Json` (`Json.Obj(...)`,
+`Json.Str(...)`, `.get(JsonCursor...)`, `fields.find(_._1 == ...)`) or
+string-concatenated JSON for a shape you know. The type is the documentation,
+the compiler checks every field, and the wire format can't drift from the code.
+
+```scala
+import zio.schema.{ Schema, derived }
+import zio.schema.annotation.fieldName
+import zio.schema.codec.JsonCodec
+
+final case class Artifact(
+    groupId: String,
+    artifactId: String,
+    @fieldName("latest_version") latestVersion: Option[String],  // wire name differs
+) derives Schema
+
+enum Status derives Schema:
+  case Ok, Missing
+
+// zio-json codec from the schema, e.g. for files or other libraries
+given zio.json.JsonCodec[Artifact] = JsonCodec.jsonCodec(Schema[Artifact])
+
+// zio-http: bodies straight to and from the type
+import zio.schema.codec.JsonCodec.schemaBasedBinaryCodec
+val artifact: IO[Throwable, Artifact] = request.body.to[Artifact]
+val response = Response(body = Body.from(artifact))
+```
+
+- One type per shape. Nested objects are nested case classes; optional fields
+  are `Option`; closed sets of values are `enum`s, not `String`s; open maps
+  are `Map[String, A]`. Keep the Scala names idiomatic and map wire names
+  with `@fieldName` rather than naming fields after the wire.
+- Decode at the edge and fail with a typed error there; the rest of the code
+  only sees the model. Never `.toOption` or `.getOrElse(Json.Null)` a decode
+  failure away.
+- Tests use the same models: build the value, encode it, and assert on the
+  decoded value, not on JSON strings or AST fragments. Compare against a JSON
+  string only to pin a wire format on purpose (one golden test per shape).
+- Libraries that take a `Schema` (zio-http endpoints and bodies, zio-http-mcp
+  tool inputs/outputs, zio-schema codecs) get the derived schema; don't write
+  a JSON Schema or a codec by hand next to the type.
+- `Json` (AST) is for data whose shape the code genuinely doesn't know: a
+  proxy or relay that passes payloads through, a user-supplied arbitrary
+  object, a JSON-RPC envelope before dispatch on its `method`. Keep it at that
+  boundary and convert to a typed model as soon as the shape is known.
+- When you touch code that builds JSON by hand, replace it with a model in
+  the same change if it's small; otherwise note it as follow-up.
 
 ## ZIO Effect Composition
 
