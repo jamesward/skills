@@ -194,6 +194,27 @@ These apply to every maintained project, whatever its type.
 - Write settings in flat `build.sbt` style, for example top-level `scalaVersion := "<version>"` rather than wrapping ordinary settings in `projectRef.settings(...)`. Multi-project builds may still use project declarations for topology, aggregation, dependencies, and plugin enablement.
 - Keep both `sbt` and `sbt.bat` launcher scripts in the project root. Commit the POSIX executable bit on `sbt`; verify `sbt.bat` is present and runnable on Windows.
 
+## Working on a dependency from source
+
+To change a library and the project that uses it together, depend on the library's local checkout instead of its published artifact, behind a flag so the committed build still uses the release:
+
+```scala
+// ./sbt -Dlocal ...  builds against ../<library> instead of the published artifact
+val useLocal = sys.props.contains("local")
+val localLibrary = file("../<library>")
+
+lazy val root = (project in file(".")).dependsOn(
+  Option.when(useLocal)(RootProject(localLibrary): ClasspathDep[ProjectReference]).toSeq *
+)
+libraryDependencies ++= Option.unless(useLocal)("<org>" %% "<library>" % "<version>").toSeq
+```
+
+Use `ProjectRef(localLibrary, "<project>")` for one module of a multi-project library. Record the flag and the expected checkout path in `AGENTS.md`. Don't commit the source dependency enabled, and don't use `publishLocal` for this (see "Resolvers") unless the library can't be loaded as a build.
+
+**sbt-mcp with a source dependency.** sbt loads the library's build, including its sbt-mcp settings, into this build's sbt, but only one MCP server runs per sbt JVM: the one configured by the build you launched. That server sees both builds: `sbt-task` can run the library's tasks (`<library project>/test`), and the symbol tools index its classes through the classpath. The library's own port isn't used. To work on the library with its own MCP server as well, run sbt in its checkout, where it listens on its own port, and give the agent both servers.
+
+This only works when both builds set sbt-mcp settings with `ThisBuild /`. With `Global /` in both, the library's `Global / mcpPort` replaces this build's, so the server either can't bind (`Address already in use`, because the library's own sbt has that port) or takes the library's port, and the agent's configured server isn't there. sbt-mcp 0.1.7+ warns at load: `sbt-mcp: another build sets Global / mcpPort (...)`. Fix it by moving the settings in either build to `ThisBuild /`.
+
 ## Resolvers
 
 - Use sbt's default resolvers: Maven Central plus the `local` Ivy repository. Never commit resolver configuration to a project. That rules out a `project/repositories` file, `-Dsbt.repository.config` or `-Dsbt.override.build.repos` in `.sbtopts` or `.jvmopts`, mirror URLs, and `Resolver.mavenLocal`, `Resolver.file`, or `file://` resolvers in the build.
@@ -222,10 +243,12 @@ addSbtPlugin("com.jamesward" % "sbt-mcp" % "<latest stable sbt-mcp version>")
 - Configure sbt-mcp with flat project settings. Choose one available port in the 5000–5999 range, check it does not conflict with another local project, and commit that stable choice rather than selecting a new random port on each run. Keep the server loopback-only because its tools can execute build tasks:
 
 ```scala
-mcpEnabled := true
-mcpHost := "127.0.0.1"
-mcpPort := 5015 // Replace once with this project's chosen available port.
+ThisBuild / mcpEnabled := true
+ThisBuild / mcpHost := "127.0.0.1"
+ThisBuild / mcpPort := 5015 // Replace once with this project's chosen available port.
 ```
+
+  Use `ThisBuild /`, never `Global /`: Global is shared by every build sbt loads, so a source dependency's `Global / mcpPort` can replace this build's (see "Working on a dependency from source").
 
 - Run the initialization task once to print client-specific setup guidance:
 
@@ -312,9 +335,9 @@ libraryDependencies += "com.jamesward" % "skills" % "<latest stable version>" % 
    scalaVersion := "<latest stable Scala version>"
 
    // sbt-mcp settings
-   mcpEnabled := true
-   mcpHost := "127.0.0.1"
-   mcpPort := <chosen available 5000-5999 port>
+   ThisBuild / mcpEnabled := true
+   ThisBuild / mcpHost := "127.0.0.1"
+   ThisBuild / mcpPort := <chosen available 5000-5999 port>
    ```
 
 5. Add the compiler defaults and Skills dependency described above.
