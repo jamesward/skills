@@ -99,6 +99,8 @@ The skills dependency is updated first so the rest of the run follows the newest
 
    **Security alerts.** Read the open Dependabot alerts: `gh api 'repos/{owner}/{repo}/dependabot/alerts?state=open' --jq '.[] | [.number, .security_advisory.severity, .dependency.package.name, .security_vulnerability.first_patched_version.identifier, .security_advisory.summary] | @tsv'`. Fix each one in the rolling PR by moving to a patched version. Where the patched version breaks a documented exception (for example it needs a newer Java than the project targets), or no patch exists, don't force it: list the alert in the PR description and add the `needs-human` label. Alerts close themselves once the fix reaches the default branch. Dependabot alerts stay on, but Dependabot security update PRs are off: this step replaces them.
 
+   Some Claude Code cloud sessions have no `gh` CLI at all (not even for REST calls), and the project's GitHub MCP server may expose no Dependabot-alerts tool. When neither path can list the alerts, don't fail the run: say so in the PR description (name the missing tool) and continue the rest of the routine. Treat it as a factory finding for this step.
+
    Fold in any open dependency-bump PRs, then close them. If a just-released version fails to resolve with "Not found", it hasn't reached every mirror yet: use the newest version that does resolve for this run and note it, rather than reporting a rate limit or failing the run. After changing `project/build.properties` or `project/plugins.sbt`, reload sbt before validating (`reload` through `sbt-task`, or `./sbt shutdown`).
 
    How to find versions:
