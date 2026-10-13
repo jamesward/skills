@@ -416,7 +416,7 @@ sbt plugins are libraries, so the Library Projects rules apply, plus:
 
 - Build the plugin with sbt's own Scala version, not the newest Scala (see "Compatibility rules for upgrades").
 - Test with sbt's scripted framework (`src/sbt-test`), and have CI run `scripted`.
-- Plugins cross-built for sbt 1 and sbt 2 run the scripted tests for both, or document in `AGENTS.md` which one they cover.
+- Plugins cross-built for sbt 1 and sbt 2 run the scripted tests for both, or document in `AGENTS.md` which one they cover. Use `+scripted` in CI and validation: plain `scripted` runs only for the default `pluginCrossBuild / sbtVersion` and silently skips fixtures whose `project/build.properties` pins the other sbt (`Tests skipped in group ...`).
 
 ## Code Sample Projects
 
