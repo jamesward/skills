@@ -543,6 +543,19 @@ Maven and Gradle projects follow the same approach as sbt projects: a pinned wra
   Extract with `./gradlew extractSkillsJars`.
 - **Validation:** `./gradlew build`.
 
+# Node.js Projects
+
+Node.js projects (a `package.json` with no JVM build) follow the same approach: pinned versions kept current by the Maintenance Routine, CI on every push and PR, and a project `AGENTS.md`. The differences:
+
+- **Skills:** there's no SkillsJars for npm, so the project has no Skills dependency. `.factory/MAINTENANCE.md` reads this Skill from a clone of `jamesward/skills` instead (the factory writes that variant), and `AGENTS.md` names the Skills that apply as usual.
+- **MCP:** none is required. Find versions with `npm view <package> version` (latest stable) and `npm outdated`; use the javadocs tools only if the project has JVM parts.
+- **Node version:** the active LTS line. Set `"engines": { "node": "<LTS major>.x" }` in `package.json`: Heroku and other hosts then take the newest patch of that line on each deploy. CI reads the same value with `actions/setup-node` and `node-version-file: package.json`. Move to the next LTS line once it's active LTS (even-numbered majors, from October of their release year) and the tests pass; when the current line reaches end of life, that move is required.
+- **Dependencies:** pin exact versions in `dependencies` and `devDependencies` (no `^`, `~` or `latest`), commit `package-lock.json`, and install with `npm ci`. To update, set each version to `npm view <package> version` (applying the version gotchas of "Maven and Gradle Projects": no prereleases), run `npm install` to refresh the lockfile, and keep the lockfile's other changes. Update transitive dependencies with `npm update` when `npm audit` reports a fixable issue.
+- **Security alerts:** besides Dependabot alerts, run `npm audit --omit=dev` and fix what it reports through updates. Report anything that needs a breaking major you can't make.
+- **Validation:** `npm ci && npm test`, plus starting the server and requesting one endpoint (`PORT=<port> npm start &`, then `curl -fsS http://localhost:<port>/<path>`), with the exact commands in `AGENTS.md`.
+- **CI:** the "All Projects" triggers, `actions/setup-node` with `node-version-file: package.json` and `cache: npm`, then `npm ci` and `npm test`.
+- **Server deploys:** when a merge to the default branch deploys the service (for example a Heroku app with GitHub auto-deploy), record the app and URL in `AGENTS.md`, and after merging check the production URL with the same request as validation. If it fails, label the PR `needs-human` and say so; don't revert on your own.
+
 # Website Projects (draft)
 
 > **Draft.** This is based on the ai4jvm.com routine and will be filled out as more maintained websites are covered.
