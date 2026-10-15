@@ -26,6 +26,11 @@ Use exactly this content:
 
 If there are other open PRs for this work, update that PR instead of creating a new one.
 
+The run isn't finished until the Maintenance Routine's step 8 ("Improve the factory") is done:
+every finding it lists needs a link to the PR or issue you opened or updated for it in another
+repo (`jamesward/skills`, `jamesward/projects`, or a managed tool's repo), attached with `add_repo`.
+"Not filed" isn't an allowed outcome; if filing fails, quote the error. Do it before merging.
+
 Whenever a step says to stop, or the run can't finish: revert your uncommitted edits
 (`git checkout -- .`), don't push a branch or open a PR, and end with a report that quotes what
 failed. A cloud session's Stop hook asks you to commit uncommitted changes; don't commit unvalidated
@@ -68,8 +73,12 @@ reply is the report.
    `.kiro/skills/` is gitignored, so it doesn't exist until this runs. If the build can't download
    artifacts, quote the exact error; don't guess at a cause such as a rate limit. A "Not found" for a
    version released in the last day means it hasn't reached every mirror yet: pin the newest version
-   that does resolve, continue, and say so in the report. For any other download error (for example
-   HTTP 429 or a proxy 403), stop and report it instead of changing resolvers.
+   that does resolve, continue, and say so in the report. An HTTP 429 from Maven Central
+   for a version released in the last day usually means the same thing: the mirror doesn't have it
+   yet, so the build fell back to Maven Central (check with `curl -s -o /dev/null -w '%{http_code}'
+   https://maven-central.storage-download.googleapis.com/maven2/<path>`; 404 means not mirrored). Pin
+   the newest version the mirror has and continue. For any other download error (for example a 429
+   for an older artifact, or a proxy 403), stop and report it instead of changing resolvers.
 3. Read `.kiro/skills/*zen-of-projects*/SKILL.md` and follow its "Maintenance Routine" section, using
    `AGENTS.md` for this project's commands and documented exceptions. While an unreleased version of
    the Skill is being tested, `.factory/skills/zen-of-projects/SKILL.md` exists. Read that file
@@ -120,7 +129,7 @@ The skills dependency is updated first so the rest of the run follows the newest
    - Updates to `AGENTS.md` and to factory-owned files (`.factory/`, `.claude/`, `.mcp.json`, `.kiro/settings/mcp.json`) don't count as alignment for this rule; they can merge with the bumps.
    - **Request human review** and do not merge when the branch also changes public APIs, behavior, or other alignment beyond version bumps (build settings, compiler flags, CI workflows), or when `AGENTS.md` requires human review for the kind of change involved. Add the `needs-human` label and say what needs a decision.
    - **Escalate** when a failure cannot be fixed. Leave the PR open and unmerged with the `needs-human` label. Comment with the failing bump, the error, and what was tried. Do not revert the bump just to get a green build.
-8. **Improve the factory.** This step is required in every run, including runs that stop early (do it before the final report). Review the run itself: tool friction (MCP fallbacks, retries, timeouts, output a tool didn't return), instructions that were missing, unclear or wrong, and anything you had to guess. For each finding, decide where the fix belongs:
+8. **Improve the factory.** This step is required in every run, including runs that stop early. Do it before merging the rolling PR (step 7), so it isn't skipped once the merge is done. Review the run itself: tool friction (MCP fallbacks, retries, timeouts, output a tool didn't return), instructions that were missing, unclear or wrong, and anything you had to guess. For each finding, decide where the fix belongs:
    - **Only this project:** a note in its `AGENTS.md`, on the rolling PR.
    - **Every project:** this Skill, in `jamesward/skills` (`skills/zen-of-projects/SKILL.md`, or the other `skills/*/SKILL.md`).
    - **The factory itself:** setup, scripts or schedules, in `jamesward/projects` (`FACTORY.md` and the `factory-*` scripts).
@@ -270,6 +279,7 @@ ThisBuild / mcpPort := 5015 // Replace once with this project's chosen available
   - A failing `test`, `testOnly` or `testFull` reports each failed test's name and assertion message (sbt-mcp 0.1.4+). Read them in the response; don't switch to `./sbt` to see the failure. Test stdout (`println`) isn't included. The JUnit XML under `target/**/test-reports/` has the full output.
   - sbt 2 caches test results: an unchanged test that passed before is skipped, so a run that takes about a second may have run nothing. Use `testFull` (or `testOnly` after a change) when a real run is needed.
   - `set ...`, `reload` and edits to `build.sbt` reload the build, which restarts the sbt-mcp server. The in-flight call can come back as a lost connection; call it again. Don't change settings with `set` to work around missing output.
+  - Cross-building commands (`+compile`, `+scripted`, `++<version>`) switch the Scala version, which reloads the build and restarts the sbt-mcp server, so the call is lost. Run them with `./sbt` instead.
   - Right after sbt starts, `sbt-task` can answer `no sbt channel available yet`. Wait a few seconds and retry.
 - sbt 2.x uses a persistent daemon. After changing environment variables or JVM `-D` properties, stop it before the next build so the new process receives those values:
 
