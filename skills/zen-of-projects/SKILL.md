@@ -106,7 +106,7 @@ The skills dependency is updated first so the rest of the run follows the newest
    - GitHub Actions versions in `.github/workflows`.
    - Builds nested in the repo that are part of its tests or examples, such as an `example/` build or `src/sbt-test` fixtures. Leave fixtures that pin old versions on purpose.
 
-   Fold in any open dependency-bump PRs, then close them. If a just-released version fails to resolve with "Not found", it hasn't reached every mirror yet: use the newest version that does resolve for this run and note it, rather than reporting a rate limit or failing the run. After changing `project/build.properties` or `project/plugins.sbt`, reload sbt before validating (`reload` through `sbt-task`, or `./sbt shutdown`).
+   Fold in any open dependency-bump PRs, then close them. If a just-released version fails to resolve with "Not found", it hasn't reached every mirror yet: use the newest version that does resolve for this run and note it, rather than reporting a rate limit or failing the run. A just-released sbt plugin that fails to resolve (404 on the mirror, then HTTP 429 from Maven Central) leaves the sbt-mcp server's sbt stuck at its "(r)etry, (q)uit, (l)ast, or (i)gnore?" prompt, because its stdin never answers and every `sbt-task` then hangs. Revert that plugin to the previous version, kill the stuck sbt, and validate with `./sbt` in the background (Monitor on its log). After changing `project/build.properties` or `project/plugins.sbt`, reload sbt before validating (`reload` through `sbt-task`, or `./sbt shutdown`).
 
    How to find versions:
 
