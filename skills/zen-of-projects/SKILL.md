@@ -38,9 +38,10 @@ work to satisfy it. Don't send push notifications: the routine emails its result
 reply is the report.
 
 0. Load the project's MCP tools before anything else. `AGENTS.md` names the MCP server:
-   `sbt-mcp-<project>` for sbt projects, `javadocs` for Maven and Gradle projects. In Claude Code
-   these tools are deferred, so load them with ToolSearch (search for the server name). They include
-   the javadocs.dev tools such as `get_latest_version`, and for sbt also `sbt-task`. Use them for
+   `sbta` for sbt projects, `javadocs` for Maven and Gradle projects. In Claude Code these tools are
+   deferred, so load them with ToolSearch (search for the server name). They include the
+   javadocs.dev tools such as `get_latest_version`, and for sbt also the build tools (`compile`,
+   `test`, `sbt-task`, ...). Use them for
    the rest of the run, and fall back to the build tool's launcher and `curl` only when they are
    unavailable. Say which one you used.
 1. Update the Skills dependency, `com.jamesward:skills`, to its latest release. Where it's pinned:
@@ -64,9 +65,9 @@ reply is the report.
    Maven Central can rate-limit cloud sessions (HTTP 429); the retries cover that. Set every pin
    to the version it prints.
 2. Extract the Skills to `.kiro/skills/`:
-   - sbt: `extractSkillsJars` through the sbt-mcp `sbt-task` tool, or `./sbt extractSkillsJars`.
-     After `build.sbt` changes, sbt reloads and restarts the sbt-mcp server. The first `sbt-task`
-     call afterwards can report a lost connection; run it again rather than switching to `./sbt`.
+   - sbt: `extractSkillsJars` through the `sbta` server's `sbt-task` tool, or
+     `./sbta extractSkillsJars`. After `build.sbt` changes, sbt reloads; if the next call reports a
+     lost connection, run it again.
    - Maven: `./mvnw -q skillsjars:extract`
    - Gradle: `./gradlew extractSkillsJars`
 
@@ -101,17 +102,18 @@ The skills dependency is updated first so the rest of the run follows the newest
 2. **Preserve existing work.** Build on the PR branch and any uncommitted changes. Never reset, force-push over, or discard them. Work only from the repository's default branch, through the rolling PR. Don't rebase, merge into, or otherwise touch other branches.
 3. **Update dependencies.** Bring each of these to the latest stable version, applying the compatibility rules below and the exceptions in `AGENTS.md`:
    - `project/build.properties`: `sbt.version` (`org.scala-sbt:sbt`).
-   - `project/plugins.sbt`: every `addSbtPlugin`. Resolve sbt 2 plugins by their `_sbt2_3` artifact (for example `com.jamesward:sbt-mcp_sbt2_3`).
+   - `./sbta` and `sbta.bat`: the latest [sbta release](https://github.com/jamesward/sbta/releases/latest) (see "sbta"). The factory sync keeps them current in managed repos; if they're older, update both from the release.
+   - `project/plugins.sbt`: every `addSbtPlugin`. Resolve sbt 2 plugins by their `_sbt2_3` artifact (for example `com.skillsjars:skillsjars-sbt-plugin_sbt2_3`).
    - `build.sbt` (and any other `*.sbt` or `project/*.scala` that holds versions): `scalaVersion`, every library, and the `com.jamesward:skills` Skills dependency.
    - GitHub Actions versions in `.github/workflows`.
    - Builds nested in the repo that are part of its tests or examples, such as an `example/` build or `src/sbt-test` fixtures. Leave fixtures that pin old versions on purpose.
 
-   Fold in any open dependency-bump PRs, then close them. If a just-released version fails to resolve with "Not found", it hasn't reached every mirror yet: use the newest version that does resolve for this run and note it, rather than reporting a rate limit or failing the run. After changing `project/build.properties` or `project/plugins.sbt`, reload sbt before validating (`reload` through `sbt-task`, or `./sbt shutdown`).
+   Fold in any open dependency-bump PRs, then close them. If a just-released version fails to resolve with "Not found", it hasn't reached every mirror yet: use the newest version that does resolve for this run and note it, rather than reporting a rate limit or failing the run. After changing `project/build.properties` or `project/plugins.sbt`, reload sbt before validating (`reload` through `sbt-task`, or `./sbta shutdown`).
 
    How to find versions:
 
-   - **Check MCP first.** At the start of the run, note whether the project's sbt-mcp server (named in `AGENTS.md`) and the javadocs.dev tools are available, and say so in the PR description. In Claude Code, MCP tools can be deferred and won't appear in your tool list until you load them with ToolSearch. Search for the server name before concluding that they are missing. If the sbt-mcp server is configured but missing, read `/tmp/sbt-mcp-stdio.log` and `/tmp/sbt-mcp-server.log` and include the cause.
-   - **Find versions with javadocs.dev MCP.** Use `get_latest_version`, which skips prereleases, for every artifact, through the project's sbt-mcp server or the javadocs.dev connector (`https://www.javadocs.dev/mcp`). Use the fallback below only for an artifact whose `get_latest_version` call fails. An `sbt-task` failure doesn't make `get_latest_version` unavailable. Use `list_javadoc_symbols`, `get_javadoc_symbol`, `list_source_files` and `get_source_file` to read a new API when migrating code.
+   - **Check MCP first.** At the start of the run, note whether the project's MCP server (`sbta` or `javadocs`, named in `AGENTS.md`) and the javadocs.dev tools are available, and say so in the PR description. In Claude Code, MCP tools can be deferred and won't appear in your tool list until you load them with ToolSearch. Search for the server name before concluding that they are missing. If the `sbta` server is configured but missing, read `project/target/sbta/mcp.log` and `project/target/sbta/boot.log` and include the cause.
+   - **Find versions with javadocs.dev MCP.** Use `get_latest_version`, which skips prereleases, for every artifact, through the project's `sbta` server or the javadocs.dev connector (`https://www.javadocs.dev/mcp`). Use the fallback below only for an artifact whose `get_latest_version` call fails. An `sbt-task` failure doesn't make `get_latest_version` unavailable. Use `list_javadoc_symbols`, `get_javadoc_symbol`, `list_source_files` and `get_source_file` to read a new API when migrating code.
    - **Fallback without MCP: Maven metadata.** Maven Central rate-limits shared cloud IPs (HTTP 429), so make few requests, retry, and filter out prereleases. Never use a mirror for this, because mirrors lag new releases.
 
      ```bash
@@ -134,7 +136,7 @@ The skills dependency is updated first so the rest of the run follows the newest
    - **Every project:** this Skill, in `jamesward/skills` (`skills/zen-of-projects/SKILL.md`, or the other `skills/*/SKILL.md`).
    - **The factory itself:** setup, scripts or schedules, in `jamesward/projects` (`FACTORY.md` and the `factory-*` scripts).
 
-   For the last two, call the `add_repo` tool (load it with ToolSearch) with `access: "push"`, then clone the repo as its result says, one clone at a time. Look for an open PR there whose title starts with `Factory improvement:` and covers the same finding. Add to it if there is one; otherwise open one from a `claude/` branch with the `factory-improvement` label. Describe the evidence (quote errors, link this run's PR) and the proposed change. Never merge these PRs, and don't change other files in those repos. Writing a finding only into this repo's rolling PR description doesn't count: no one reads it there. Anything that would also hit another project (a wrong or missing instruction, a validation command that doesn't fit, a workaround you needed) is a Skill or factory finding, so open or extend the PR. Bugs in a tool that is itself a managed repo (sbt-mcp, the SkillsJars plugins, ...) go to that repo as an issue titled `Factory improvement: ...` (attach it with `add_repo`, check its open issues first, and quote the evidence); other tools' bugs go in the PR description. Known, already-tracked limits (for example Dependabot alerts that can't be read) aren't new findings. At the end, list each finding and the PR or issue it went to, or "none", in the final report and the rolling PR's description.
+   For the last two, call the `add_repo` tool (load it with ToolSearch) with `access: "push"`, then clone the repo as its result says, one clone at a time. Look for an open PR there whose title starts with `Factory improvement:` and covers the same finding. Add to it if there is one; otherwise open one from a `claude/` branch with the `factory-improvement` label. Describe the evidence (quote errors, link this run's PR) and the proposed change. Never merge these PRs, and don't change other files in those repos. Writing a finding only into this repo's rolling PR description doesn't count: no one reads it there. Anything that would also hit another project (a wrong or missing instruction, a validation command that doesn't fit, a workaround you needed) is a Skill or factory finding, so open or extend the PR. Bugs in a tool that is itself a managed repo (sbta, the SkillsJars plugins, the buildpacks, ...) go to that repo as an issue titled `Factory improvement: ...` (attach it with `add_repo`, check its open issues first, and quote the evidence); other tools' bugs go in the PR description. Known, already-tracked limits (for example Dependabot alerts that can't be read) aren't new findings. At the end, list each finding and the PR or issue it went to, or "none", in the final report and the rolling PR's description.
 
 # All Projects
 
@@ -159,13 +161,13 @@ These apply to every maintained project, whatever its type.
      - "For Scala 3 and ZIO code (writing or reviewing it), follow `zen-of-scala`."
      - "For design, domain modeling, effects and testing strategy, follow `zen-of-james`."
 
-     Also say how to get them (`./sbt extractSkillsJars`, `./mvnw -q skillsjars:extract` or `./gradlew extractSkillsJars`, into `.kiro/skills/`), and to read the relevant ones before working.
-  3. **MCP:** the server name (`sbt-mcp-<project>` or `javadocs`), its port, how each agent reaches it, and that tools may be deferred (load them with ToolSearch).
+     Also say how to get them (`./sbta extractSkillsJars`, `./mvnw -q skillsjars:extract` or `./gradlew extractSkillsJars`, into `.kiro/skills/`), and to read the relevant ones before working.
+  3. **MCP:** the server name (`sbta` or `javadocs`), how each agent reaches it, and that tools may be deferred (load them with ToolSearch).
   4. **Build, test and dev commands:** the exact full validation command, how to run the app in dev, and which tests are gated, paid or need Docker.
   5. **Maintenance routine:** `.factory/MAINTENANCE.md` and how often it runs.
   6. **Exceptions** to the Skills, each with its reason.
 - **Dependency updates:** the project's `.factory/MAINTENANCE.md` routine keeps dependencies current and fixes Dependabot alerts. Don't add Dependabot version or security update PRs, or Renovate; keep Dependabot alerts on.
-- **Agent tooling lives in the project:** declare Agent Skills in the build (SkillsJars for sbt), and declare MCP servers at the project level (for example sbt-mcp), so every agent and every machine gets the same tools.
+- **Agent tooling lives in the project:** declare Agent Skills in the build (SkillsJars for sbt), and declare MCP servers at the project level (for example `sbta`), so every agent and every machine gets the same tools.
 - **Service dependencies:** use Testcontainers for databases, queues and similar services in local development and tests, pinned to the production version (see "Container images track production").
 - **Docker for tests:** a project needs Docker when its build depends on Testcontainers (for example `org.testcontainers` or `testcontainers-scala` in `build.sbt`, `project/*.scala`, `pom.xml` or `build.gradle.kts`) or `AGENTS.md` says its tests do. Projects that don't need Docker skip this. Before running the tests of one that does, make sure the daemon is up:
 
@@ -202,14 +204,14 @@ These apply to every maintained project, whatever its type.
 ## Build structure and launchers
 
 - Write settings in flat `build.sbt` style, for example top-level `scalaVersion := "<version>"` rather than wrapping ordinary settings in `projectRef.settings(...)`. Multi-project builds may still use project declarations for topology, aggregation, dependencies, and plugin enablement.
-- Keep both `sbt` and `sbt.bat` launcher scripts in the project root. Commit the POSIX executable bit on `sbt`; verify `sbt.bat` is present and runnable on Windows.
+- The project's launchers are `sbta` and `sbta.bat` (see "sbta"), in the project root, with the POSIX executable bit committed on `sbta`. Don't keep `sbt` or `sbta.bat` next to them.
 
 ## Working on a dependency from source
 
 To change a library and the project that uses it together, depend on the library's local checkout instead of its published artifact, behind a flag so the committed build still uses the release:
 
 ```scala
-// ./sbt -Dlocal ...  builds against ../<library> instead of the published artifact
+// ./sbta -Dlocal ...  builds against ../<library> instead of the published artifact
 val useLocal = sys.props.contains("local")
 val localLibrary = file("../<library>")
 
@@ -221,14 +223,12 @@ libraryDependencies ++= Option.unless(useLocal)("<org>" %% "<library>" % "<versi
 
 Use `ProjectRef(localLibrary, "<project>")` for one module of a multi-project library. Record the flag and the expected checkout path in `AGENTS.md`. Don't commit the source dependency enabled, and don't use `publishLocal` for this (see "Resolvers") unless the library can't be loaded as a build.
 
-**sbt-mcp with a source dependency.** sbt loads the library's build, including its sbt-mcp settings, into this build's sbt, but only one MCP server runs per sbt JVM: the one configured by the build you launched. That server runs tasks in both builds (`sbt-task` with `<library project>/test`), but its symbol tools (`glob-search`, `inspect`, `symbol-location`) only index this build's own modules, not the library. The library's own port isn't used. For symbol work on the library, run sbt in its checkout too, where its server listens on its own port, and give the agent both servers.
-
-This only works when both builds set sbt-mcp settings with `ThisBuild /`. With `Global /` in both, the library's `Global / mcpPort` replaces this build's, so the server either can't bind (`Address already in use`, because the library's own sbt has that port) or takes the library's port, and the agent's configured server isn't there. sbt-mcp 0.1.7+ warns at load: `sbt-mcp: another build sets Global / mcpPort (...)`. Fix it by moving the settings in either build to `ThisBuild /`.
+**sbta with a source dependency.** sbt loads the library's build into this build's sbt. The `sbta` server serves the build you launched it in, and its tools run tasks in both builds (for example `sbt-task` with `<library project>/test`). The library's own `./sbta --mcp` isn't involved; for its tools, run `./sbta --mcp` in the library's checkout too and give the agent both servers.
 
 ## Resolvers
 
 - Use sbt's default resolvers: Maven Central plus the `local` Ivy repository. Never commit resolver configuration to a project. That rules out a `project/repositories` file, `-Dsbt.repository.config` or `-Dsbt.override.build.repos` in `.sbtopts` or `.jvmopts`, mirror URLs, and `Resolver.mavenLocal`, `Resolver.file`, or `file://` resolvers in the build.
-- To test against an unpublished artifact, use `publishLocal`. The `local` Ivy repository is already a default resolver, so no resolver change is needed. If a test really needs another resolver, keep it ephemeral: pass it for that one invocation (for example `./sbt 'set resolvers += Resolver.mavenLocal' test`) and make sure it is not in the committed diff.
+- To test against an unpublished artifact, use `publishLocal`. The `local` Ivy repository is already a default resolver, so no resolver change is needed. If a test really needs another resolver, keep it ephemeral: pass it for that one invocation (for example `./sbta 'set resolvers += Resolver.mavenLocal' test`) and make sure it is not in the committed diff.
 - Mirrors are environment configuration, for every build tool. Gradle and Maven projects follow the same rule: no mirror URLs or extra repositories committed for it. An environment can prefer a mirror with a user-level Gradle init script (`~/.gradle/init.d/*.init.gradle.kts` that adds the mirror first to the build's existing repositories) or a user-level Maven `~/.m2/settings.xml` profile (activated by default) whose repository and plugin repository is the mirror; Maven Central stays the fallback in both.
 - An automated environment that gets rate-limited by Maven Central can put a mirror first in the user-level `~/.sbt/repositories`, with Maven Central as the fallback, and add `-Dsbt.override.build.repos=true` to the user-level `~/.config/sbt/sbtopts`:
 
@@ -241,50 +241,30 @@ This only works when both builds set sbt-mcp settings with `ThisBuild /`. With `
 
   The sbt launcher and the build then download from the Google mirror and fall back to Maven Central for anything the mirror lacks, such as a release from the last few hours. With `sbt.override.build.repos=true`, sbt ignores `resolvers` declared in the build. Add any extra repository a project needs to the environment's list instead.
 
-  `sbtopts` only reaches sbt started through the `./sbt` script. A nested sbt, such as the one `scripted` launches for sbt plugin tests, runs `java -jar sbt-launch.jar` with a temporary `sbt.global.base` and ignores both files. Give every JVM the settings with the environment variable `JDK_JAVA_OPTIONS=-Dsbt.repository.config=$HOME/.sbt/repositories -Dsbt.override.build.repos=true` (expanded to the real path).
+  `sbtopts` only reaches sbt started through the `./sbta` (or `./sbta`) script. A nested sbt, such as the one `scripted` launches for sbt plugin tests, runs `java -jar sbt-launch.jar` with a temporary `sbt.global.base` and ignores both files. Give every JVM the settings with the environment variable `JDK_JAVA_OPTIONS=-Dsbt.repository.config=$HOME/.sbt/repositories -Dsbt.override.build.repos=true` (expanded to the real path).
 
-## sbt-mcp
+## sbta
 
-- Add the latest stable sbt-mcp plugin to `project/plugins.sbt`:
+[sbta](https://github.com/jamesward/sbta) is the project's sbt launcher and its MCP server. `./sbta <args>` is sbt: the same options, `.sbtopts`/`.jvmopts`, and sbtn for sbt 2. `./sbta --mcp` is an MCP stdio server for the build, a client of sbt's own server: it starts sbt when it isn't running, and sbt keeps running after it, shared with your own `./sbta` commands. There's no sbt plugin, port or build setting.
 
-```scala
-addSbtPlugin("com.jamesward" % "sbt-mcp" % "<latest stable sbt-mcp version>")
-```
+- **Launchers:** commit `sbta` and `sbta.bat` from the latest release in the project root, with the executable bit on `sbta`, and remove `sbt` and `sbta.bat`:
 
-  Resolve it from [the sbt 2 / Scala 3 plugin artifact](https://www.javadocs.dev/com.jamesward/sbt-mcp_sbt2_3/latest).
-- Configure sbt-mcp with flat project settings. Choose one available port in the 5000–5999 range, check it does not conflict with another local project, and commit that stable choice rather than selecting a new random port on each run. Keep the server loopback-only because its tools can execute build tasks:
+  ```bash
+  curl -fsSL -o sbta https://github.com/jamesward/sbta/releases/latest/download/sbta
+  curl -fsSL -o sbta.bat https://github.com/jamesward/sbta/releases/latest/download/sbta.bat
+  chmod +x sbta
+  ```
 
-```scala
-ThisBuild / mcpEnabled := true
-ThisBuild / mcpHost := "127.0.0.1"
-ThisBuild / mcpPort := 5015 // Replace once with this project's chosen available port.
-```
-
-  Use `ThisBuild /`, never `Global /`: Global is shared by every build sbt loads, so a source dependency's `Global / mcpPort` can replace this build's (see "Working on a dependency from source").
-
-- Run the initialization task once to print client-specific setup guidance:
-
-```bash
-./sbt --server --no-colors --supershell=false mcpInstall
-```
-
-- `mcpInstall` prints guidance; it does **not** inspect or edit the MCP client configuration. Follow its output:
-  1. Check the target config for the same server key or URL and reconcile duplicates.
-  2. Add the emitted HTTP server entry to the applicable project-local config, such as `.kiro/settings/mcp.json`, `.mcp.json`, or `.cursor/mcp.json`.
-  3. Start a long-lived sbt session and keep it running while the MCP client uses the server. A one-shot `mcpInstall` process does not keep the server alive.
-  4. Reconnect or reinitialize the MCP client after the server is running so it reloads the tool list.
-- Record the MCP server name and expected tool workflow in `AGENTS.md`. Agents should use MCP for sbt tasks and Scala/classpath symbol inspection when it is available, and clearly state when they must fall back to the project launcher.
-- **Structured tools (sbt-mcp 0.1.8+):** prefer `compile`, `test` (`"full": true` for a complete run, `tests` for specific classes), `run`, `clean`, `publish-local`, `projects`, `test-names` and `show`. They take typed arguments and return JSON: success, counts, each compiler problem and each failed test. Use `sbt-task` for anything else. Multi-command lines (`a; b`) through `sbt-task` run every command since 0.1.8; before that they returned `[ok]` with no output and ran nothing.
-- **Using `sbt-task` for tests:**
-  - A failing `test`, `testOnly` or `testFull` reports each failed test's name and assertion message (sbt-mcp 0.1.4+). Read them in the response; don't switch to `./sbt` to see the failure. Test stdout (`println`) isn't included. The JUnit XML under `target/**/test-reports/` has the full output.
-  - sbt 2 caches test results: an unchanged test that passed before is skipped, so a run that takes about a second may have run nothing. Use `testFull` (or `testOnly` after a change) when a real run is needed.
-  - `set ...`, `reload` and edits to `build.sbt` reload the build, which restarts the sbt-mcp server. The in-flight call can come back as a lost connection; call it again. Don't change settings with `set` to work around missing output.
-  - Cross-building commands (`+compile`, `+scripted`, `++<version>`) switch the Scala version, which reloads the build and restarts the sbt-mcp server, so the call is lost. Run them with `./sbt` instead.
-  - Right after sbt starts, `sbt-task` can answer `no sbt channel available yet`. Wait a few seconds and retry.
+  The scripts pin their sbta version (they download its jar from the GitHub release on first use), so keep them at the latest release. CI, docs and scripts use `./sbta`; the Heroku buildpacks run `./sbta` when it's there.
+- **MCP config:** `./sbta --mcp --setup kiro claude` adds the `sbta` server (`./sbta --mcp`, 30-minute timeout) to `.kiro/settings/mcp.json`, `.mcp.json` and `.claude/settings.json` (`enabledMcpjsonServers`), and keeps other servers. It prints a "Build, Test & Dev Workflow" section: merge it into `AGENTS.md`. The server is named `sbta` in every project.
+- **Tools:** prefer the structured tools: `compile`, `test` (`full` for all, `tests` for specific classes), `run`, `clean`, `publish-local`, `projects`, `test-names`, `main-classes`, `dependencies` and `show`. They return JSON, including each compiler problem and each failed test's suite, test and message. After editing Scala 3 sources use `check` (a fast type check without compiling). Use `glob-search`, `inspect` and `symbol-location` for symbols, and `sbt-task` for any other command line (`list-tasks` to find tasks). The javadocs.dev tools (`get_latest_version`, ...) are proxied.
+- sbt 2 caches test results: an unchanged test that passed before is skipped, so a run that takes about a second may have run nothing. Use `test` with `full` (or `testFull` through `sbt-task`) when a real run is needed.
+- If a call comes back as a lost connection while sbt reloads (after a `build.sbt` change, `reload` or a cross-build), call it again. If the server is unavailable, say so and use `./sbta <command>`. Logs: `project/target/sbta/mcp.log` and `project/target/sbta/boot.log`.
+- `--mcp` needs Unix domain sockets (macOS and Linux); on Windows, `sbta.bat` works as sbt without MCP.
 - sbt 2.x uses a persistent daemon. After changing environment variables or JVM `-D` properties, stop it before the next build so the new process receives those values:
 
 ```bash
-./sbt shutdown
+./sbta shutdown
 ```
 
 ## Compiler defaults
@@ -322,7 +302,7 @@ libraryDependencies += "com.jamesward" % "skills" % "<latest stable version>" % 
 
 - Follow [the SkillsJars setup instructions](https://www.skillsjars.com/setup), including:
   - Add `.kiro/skills/` (or the selected generated directory) to `.gitignore`.
-  - Run `./sbt extractSkillsJars` after setup and whenever the pinned Skills dependency changes.
+  - Run `./sbta extractSkillsJars` after setup and whenever the pinned Skills dependency changes.
   - Read the relevant extracted `SKILL.md` files before working.
   - Record this repeatable workflow in `AGENTS.md`.
 - Vet third-party Skills before adding them. Automated scanning is not a substitute for reviewing instructions that an agent will execute.
@@ -340,22 +320,17 @@ libraryDependencies += "com.jamesward" % "skills" % "<latest stable version>" % 
    sbt.version=<latest stable sbt 2.x version>
    ```
 
-2. Add the root `sbt` and `sbt.bat` launchers and make `sbt` executable.
-3. Create `project/plugins.sbt` with pinned stable sbt-mcp and SkillsJars plugin versions.
+2. Add `sbta` and `sbta.bat` from the latest sbta release in the project root and make `sbta` executable (see "sbta").
+3. Create `project/plugins.sbt` with a pinned stable SkillsJars plugin version.
 4. Create a flat `build.sbt` containing at least:
 
    ```scala
    name := "<project name>"
    scalaVersion := "<latest stable Scala version>"
-
-   // sbt-mcp settings
-   ThisBuild / mcpEnabled := true
-   ThisBuild / mcpHost := "127.0.0.1"
-   ThisBuild / mcpPort := <chosen available 5000-5999 port>
    ```
 
 5. Add the compiler defaults and Skills dependency described above.
-6. Load sbt, run `mcpInstall`, manually register the emitted server configuration, start a long-lived sbt session, and reconnect the MCP client.
+6. Run `./sbta --mcp --setup kiro claude`, merge the section it prints into `AGENTS.md`, and reconnect the MCP client.
 7. Run `extractSkillsJars`, read the relevant Skills, and apply all remaining project instructions.
 
 ## Server Projects
@@ -384,7 +359,7 @@ libraryDependencies += "com.jamesward" % "skills" % "<latest stable version>" % 
 
 ### Heroku deploys
 
-- Scala servers on Heroku use exactly these buildpacks, in this order: `heroku/jvm`, then [`https://github.com/jamesward/buildpack-scala`](https://github.com/jamesward/buildpack-scala) (Scala Native servers: [`buildpack-scala-native`](https://github.com/jamesward/buildpack-scala-native)). For a multi-module build, set the `SBT_PROJECT` config var to the server module. Record the app name, URL and buildpacks in `AGENTS.md`.
+- Scala servers on Heroku use exactly these buildpacks, in this order: `heroku/jvm`, then [`https://github.com/jamesward/buildpack-scala`](https://github.com/jamesward/buildpack-scala) (Scala Native servers: [`buildpack-scala-native`](https://github.com/jamesward/buildpack-scala-native)). They run the project's `./sbta` (or `./sbta`). For a multi-module build, set the `SBT_PROJECT` config var to the server module. Record the app name, URL and buildpacks in `AGENTS.md`.
 - JVM servers exit on `OutOfMemoryError` (`-XX:+ExitOnOutOfMemoryError`), so Heroku restarts the dyno instead of leaving one that can't allocate. `buildpack-scala` adds it to `JAVA_TOOL_OPTIONS`; for other JVM servers (for example Gradle or Maven Spring Boot apps on `heroku/gradle` or `heroku/java`) set the config var `JAVA_TOOL_OPTIONS=-XX:+ExitOnOutOfMemoryError`. Leave JVM memory sizing to `heroku/jvm`'s defaults unless `AGENTS.md` records a reason.
 - Don't change an app's buildpacks, stack or config vars in the maintenance routine; say in the PR what should change and label it `needs-human`.
 
@@ -410,11 +385,11 @@ libraryDependencies += "com.jamesward" % "skills" % "<latest stable version>" % 
 - Put `AppTest` in `src/test/scala`. It should compose the normal application routes/services with Testcontainer-backed layers and safe dev-only configuration. Run it through Test scope so production `App` remains unchanged:
 
   ```bash
-  ./sbt api/Test/run
-  ./sbt '~api/Test/runReload'
+  ./sbta api/Test/run
+  ./sbta '~api/Test/runReload'
   ```
 
-  In a single-module server, use `./sbt Test/run` or a project alias such as `dev` that expands to `~Test/runReload`. Document the exact module commands in `AGENTS.md`.
+  In a single-module server, use `./sbta Test/run` or a project alias such as `dev` that expands to `~Test/runReload`. Document the exact module commands in `AGENTS.md`.
 
 ## Library Projects
 
@@ -460,8 +435,8 @@ Every project that publishes an artifact to Maven Central, including libraries a
 
 After creating or changing the build:
 
-1. Run `./sbt shutdown` first when environment variables, JVM `-D` properties, or daemon-sensitive configuration changed.
-2. Run `./sbt extractSkillsJars` and verify the generated Skills are ignored.
+1. Run `./sbta shutdown` first when environment variables, JVM `-D` properties, or daemon-sensitive configuration changed.
+2. Run `./sbta extractSkillsJars` and verify the generated Skills are ignored.
 3. Compile main and test sources with the strict compiler options enabled.
 4. Run the complete non-metered test suite. If the project needs Docker, start it first (see "Docker for tests" in All Projects). Prefer `testFull` in CI when a guaranteed full sbt 2 test run is required rather than an incremental cached run.
 5. For server applications, run `stage` and a minimal startup or health-check smoke test.
@@ -471,10 +446,10 @@ After creating or changing the build:
 A typical validation sequence is:
 
 ```bash
-./sbt shutdown
-./sbt extractSkillsJars
-./sbt "Test / compile; testFull; stage"   # server applications
-./sbt "Test / compile; testFull"          # libraries and sbt plugins (no `stage`; plugins add `+scripted`)
+./sbta shutdown
+./sbta extractSkillsJars
+./sbta "Test / compile; testFull; stage"   # server applications
+./sbta "Test / compile; testFull"          # libraries and sbt plugins (no `stage`; plugins add `+scripted`)
 ```
 
 Record the project's exact command in `AGENTS.md` (see "All Projects"). If it's missing, add it in the Align step rather than guessing.
@@ -489,7 +464,7 @@ Maven and Gradle projects follow the same approach as sbt projects: a pinned wra
 - **Wrappers:** commit the wrapper and keep it current. Use `mvnw`, `mvnw.cmd` and `.mvn/wrapper/` for Maven, and `gradlew`, `gradlew.bat` and `gradle/wrapper/` for Gradle. Commit the POSIX executable bit. Always build through the wrapper.
 - **Strict compilation:** warnings fail the build. For Java, use `-Xlint:all -Werror` (add `-Xlint:-processing` if annotation processors are noisy). For Kotlin, use `allWarningsAsErrors`. Fix deprecations rather than suppressing them.
   - **Old Java targets:** when a library targets an old Java version (for example 8), javac warns that the source/target is obsolete. Add `-Xlint:-options` for that warning only. `--release 8` can fail under `-Werror` when a dependency annotates element types that Java 8 lacks (jspecify's `@NullMarked` on modules, for example). In that case use `-source`/`-target` and record it in `AGENTS.md`. JDK 8's javac also warns `unknown enum constant ElementType.MODULE` for such annotations, and no `-Xlint` option suppresses that. If CI builds on JDK 8, enable `-Werror` only on newer JDKs, through a Maven profile activated on `<jdk>[9,)</jdk>` or a Gradle condition on the toolchain. Verify any Java-target exception with a strict build on every JDK that CI uses before writing it down.
-- **MCP:** there is no sbt-mcp, so register the javadocs.dev MCP server directly as `javadocs`, and record it in `AGENTS.md`:
+- **MCP:** there is no sbta, so register the javadocs.dev MCP server directly as `javadocs`, and record it in `AGENTS.md`:
   - `.mcp.json` (Claude Code):
 
     ```json
