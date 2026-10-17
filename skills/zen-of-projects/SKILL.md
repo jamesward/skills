@@ -382,6 +382,12 @@ libraryDependencies += "com.jamesward" % "skills" % "<latest stable version>" % 
   enablePlugins(JavaAppPackaging)
   ```
 
+### Heroku deploys
+
+- Scala servers on Heroku use exactly these buildpacks, in this order: `heroku/jvm`, then [`https://github.com/jamesward/buildpack-scala`](https://github.com/jamesward/buildpack-scala) (Scala Native servers: [`buildpack-scala-native`](https://github.com/jamesward/buildpack-scala-native)). For a multi-module build, set the `SBT_PROJECT` config var to the server module. Record the app name, URL and buildpacks in `AGENTS.md`.
+- JVM servers exit on `OutOfMemoryError` (`-XX:+ExitOnOutOfMemoryError`), so Heroku restarts the dyno instead of leaving one that can't allocate. `buildpack-scala` adds it to `JAVA_TOOL_OPTIONS`; for other JVM servers (for example Gradle or Maven Spring Boot apps on `heroku/gradle` or `heroku/java`) set the config var `JAVA_TOOL_OPTIONS=-XX:+ExitOnOutOfMemoryError`. Leave JVM memory sizing to `heroku/jvm`'s defaults unless `AGENTS.md` records a reason.
+- Don't change an app's buildpacks, stack or config vars in the maintenance routine; say in the PR what should change and label it `needs-human`.
+
 ### Testcontainers and test-scoped development
 
 - Use Testcontainers for local development and integration tests that need real service dependencies such as databases or queues. Exercise the same production interfaces and repository/service layers; swap only configuration and resource-providing ZIO Layers rather than adding dev branches to production logic.
