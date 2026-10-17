@@ -577,6 +577,17 @@ Node.js projects (a `package.json` with no JVM build) follow the same approach: 
 - **CI:** the "All Projects" triggers, `actions/setup-node` with `node-version-file: package.json` and `cache: npm`, then `npm ci` and `npm test`.
 - **Server deploys:** when a merge to the default branch deploys the service (for example a Heroku app with GitHub auto-deploy), record the app and URL in `AGENTS.md`, and after merging check the production URL with the same request as validation. If it fails, label the PR `needs-human` and say so; don't revert on your own.
 
+# Heroku Buildpack Projects
+
+Classic Heroku buildpacks (`bin/detect`, `bin/compile`, `bin/release`, written in bash), such as `jamesward/buildpack-scala` and `jamesward/buildpack-scala-native`. The differences from other projects:
+
+- **Every merge ships to production.** Apps reference the buildpack's GitHub URL, so the default branch is what every app builds with on its next deploy. A change to `bin/` (or anything it sources) is a behavior change for all of those apps: open it as a PR labeled `needs-human`, never merge it in the maintenance routine. Changes only to CI, tests, fixtures and docs follow the normal merge policy.
+- **Skills and MCP:** no Skills dependency and no MCP server; `.factory/MAINTENANCE.md` reads this Skill from a clone of `jamesward/skills` (the factory writes that variant).
+- **Dependencies to keep current:** GitHub Actions versions; the test fixtures' sbt, Scala and plugin versions (the newest stable, the same rules as sbt projects); and any default versions the scripts download (for example an sbt or JDK fallback), which are `bin/` changes.
+- **CI:** on push to the default branch and on PRs, with the "All Projects" triggers: ShellCheck (`shellcheck -x --severity=warning`) on every script, plus each smoke test under `test/` that runs without production credentials. Tests that need a heavy toolchain may skip when it's missing, but say so in their output.
+- **Validation:** ShellCheck and every smoke test, the same as CI, with the exact commands in `AGENTS.md`.
+- **Runtime defaults** a buildpack sets for every app (for example `.profile.d` scripts) are documented in its README, can be overridden by a config var, and are covered by a smoke test.
+
 # Website Projects (draft)
 
 > **Draft.** This is based on the ai4jvm.com routine and will be filled out as more maintained websites are covered.
