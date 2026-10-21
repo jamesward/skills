@@ -518,7 +518,8 @@ Maven and Gradle projects follow the same approach as sbt projects: a pinned wra
 
 - **Build files:** use the Kotlin DSL. When `gradle/libs.versions.toml` exists, versions live there; otherwise they live in the build files.
 - **Wrapper:** update with `./gradlew wrapper --gradle-version <version>`, then run `./gradlew wrapper` once more so the wrapper jar and scripts update too. The current Gradle release is the `version` field of `https://services.gradle.org/versions/current`.
-- **Plugins:** many Gradle plugins are published only to the Gradle Plugin Portal, which javadocs.dev doesn't index. Find their latest version in `https://plugins.gradle.org/m2/<plugin id with . as />/<plugin id>.gradle.plugin/maven-metadata.xml`, applying the version gotchas above.
+- **Plugins:** many Gradle plugins are published only to the Gradle Plugin Portal, which javadocs.dev doesn't index. Find their latest version in `https://plugins.gradle.org/m2/<plugin id with . as />/<plugin id>.gradle.plugin/maven-metadata.xml`, applying the version gotchas above. The portal answers with a redirect (HTTP 303) for some plugin ids, so fetch it with `curl -L`; without `-L` the output is empty.
+- **Wrapper line endings:** `./gradlew wrapper` rewrites `gradlew.bat` with LF endings, which shows as a whole-file diff in repos that keep it CRLF. Run `git checkout gradlew.bat` after updating the wrapper.
 - **Toolchain and compiler:**
 
   ```kotlin
