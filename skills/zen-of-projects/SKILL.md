@@ -175,7 +175,7 @@ These apply to every maintained project, whatever its type.
   docker info >/dev/null 2>&1 || { mkdir -p /var/log/docker; nohup dockerd > /var/log/docker/dockerd.log 2>&1 & disown; for i in $(seq 1 30); do docker info >/dev/null 2>&1 && break; sleep 2; done; docker info >/dev/null 2>&1 || tail -20 /var/log/docker/dockerd.log; }
   ```
 
-  In Claude Code cloud sessions Docker is installed but not running, and its init script fails (`ulimit: error setting limit (Operation not permitted)`), so start `dockerd` directly as above. Pulling images needs the environment's network access set to **Full**; a TLS or network error on `docker pull` usually means it isn't. If Docker still can't start, say so and quote the log; don't skip or disable the Docker-backed tests, and don't merge on local results alone: let CI run them.
+  In Claude Code cloud sessions Docker is installed but not running, and its init script fails (`ulimit: error setting limit (Operation not permitted)`), so start `dockerd` directly as above. Pulling images needs the environment's network access set to **Full**; a TLS or network error on `docker pull` usually means it isn't. Docker Hub also rate-limits shared cloud IPs (`429 Too Many Requests` on a base-image `HEAD`): retry the `docker build`/`pull` a few times with a pause before treating it as a failure. The Docker-backed tests fail with "Unable to find image" until the image exists. If Docker still can't start, say so and quote the log; don't skip or disable the Docker-backed tests, and don't merge on local results alone: let CI run them.
 
 # Scala Projects
 
