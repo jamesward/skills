@@ -269,6 +269,14 @@ the entry via `.onExit`.
 - Guard expensive/paid integration paths (e.g. anything hitting a metered API
   key): run them very sparingly and keep them out of the default test task.
 
+## Scala Version
+
+- A published library (an artifact on Maven Central that other projects depend on) sets `scalaVersion` to the newest patch of the latest Scala LTS line, not to Scala Next. The [Scala download page](https://www.scala-lang.org/download/) names both lines ("Scala LTS currently 3.9.0" next to "Scala Next currently 3.10.0"). If more than one LTS line is current (3.3.x and 3.9.x), use the newer one.
+- Why: a Scala 3 compiler can't read TASTy written by a newer minor version, and a library's POM depends on the `scala-library` it was built with. A library built with Scala Next therefore forces every consumer onto Scala Next, while an LTS-built library works for both lines. There is no compiler flag for this: `-scala-output-version` only existed in Scala 3.1.x, and Scala 3.10 ignores it (`bad option ... was ignored`), so the only way is to build with the LTS.
+- Every dependency must work with the LTS too. After a bump, check with the `dependencies` tool that `scala-library` still resolves to the LTS version and nothing evicts it. If a dependency's new release needs Scala Next, stay on its newest release that doesn't, and record that in `AGENTS.md`.
+- Move to the next LTS line once it's released and the tests pass. When the build moves back from Scala Next, fix what the LTS compiler rejects instead of keeping Scala Next.
+- Applications, servers, samples and demos use the latest stable Scala Next. They aren't consumed as dependencies, so they get the newest compiler. sbt plugins use sbt's own Scala version (see `zen-of-projects`).
+
 ## Dependencies
 
 - Don't declare transitive dependencies explicitly. Depend only on the libraries your code imports. Let the build resolve everything they pull in, and don't re-declare a transitive dependency just to pin its version. If an explicit dependency must follow a transitive one's version, use sbt-tdepver (see the `zen-of-projects` skill).
