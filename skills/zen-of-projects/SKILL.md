@@ -193,6 +193,8 @@ These apply to every maintained project, whatever its type.
 
   In Claude Code cloud sessions Docker is installed but not running, and its init script fails (`ulimit: error setting limit (Operation not permitted)`), so start `dockerd` directly as above. Pulling images needs the environment's network access set to **Full**; a TLS or network error on `docker pull` usually means it isn't. Docker Hub also rate-limits shared cloud IPs (`429 Too Many Requests` on a base-image `HEAD`): retry the `docker build`/`pull` a few times with a pause before treating it as a failure. The Docker-backed tests fail with "Unable to find image" until the image exists. If Docker still can't start, say so and quote the log; don't skip or disable the Docker-backed tests, and don't merge on local results alone: let CI run them.
 
+- **Browser tests:** tests that drive a headless Chrome (for example with kyo-browser) use a system Chrome or Chromium when one is available, through an environment variable (json-paste reads `KYO_BROWSER_CHROME`) or the first of `google-chrome`, `chromium`, `chromium-browser` on the `PATH`, and download one only as a fallback. The factory's cloud environment links its preinstalled Playwright Chromium as `chromium` on the `PATH`, because kyo-browser's download of `chrome-headless-shell` fails to extract there (`BrowserSetupFailedException: failed to extract ... chrome-headless-shell-linux64.zip ...: Failure(1)`). If a browser test still fails while setting up the browser, check `command -v chromium` and `ls /opt/pw-browsers`, quote the result in the report, and stop as step 6 says.
+
 # Scala Projects
 
 ## Versions and Java
