@@ -78,7 +78,10 @@ reply is the report.
    - Gradle: `./gradlew extractSkillsJars`
 
    `.kiro/skills/` is gitignored, so it doesn't exist until this runs. If the build can't download
-   artifacts, quote the exact error; don't guess at a cause such as a rate limit. A "Not found" for a
+   artifacts, quote the exact error; don't guess at a cause such as a rate limit. An HTTP 429 is
+   often transient: run the same command again up to 3 times, about 30 seconds apart (in Claude
+   Code, where `sleep` is blocked, wait with the Monitor tool as the Skill's step 7 describes), and
+   apply the rules below only if it still fails. Say in the report how many attempts it took. A "Not found" for a
    version released in the last day means it hasn't reached every mirror yet: pin the newest version
    that does resolve, continue, and say so in the report. An HTTP 429 from Maven Central
    for a version released in the last day usually means the same thing: the mirror doesn't have it
