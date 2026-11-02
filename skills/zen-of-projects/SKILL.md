@@ -26,6 +26,12 @@ Use exactly this content:
 
 If there are other open PRs for this work, update that PR instead of creating a new one.
 
+Before anything else, if an open PR from the branch `claude/factory-sync` (titled `Factory sync:`)
+exists, merge it once its CI checks have run and passed (squash), then pull the default branch, so
+this run uses the synced files. It changes only factory-owned files, and the owner authorized these
+merges; the daily factory sync opens them without merging. Don't edit it. If its CI failed, or it
+has no checks, add the `needs-human` label, say so in the report, and continue without it.
+
 The run isn't finished until the Maintenance Routine's step 8 ("Improve the factory") is done:
 every finding it lists needs a link to the PR or issue you opened or updated for it in another
 repo (`jamesward/skills`, `jamesward/projects`, or a managed tool's repo), attached with `add_repo`.
