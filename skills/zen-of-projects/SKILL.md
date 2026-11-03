@@ -231,6 +231,37 @@ These apply to every maintained project, whatever its type.
 
 - **Browser tests:** tests that drive a headless Chrome (for example with kyo-browser) use a system Chrome or Chromium when one is available, through an environment variable (json-paste reads `KYO_BROWSER_CHROME`) or the first of `google-chrome`, `chromium`, `chromium-browser` on the `PATH`, and download one only as a fallback. The factory's cloud environment links its preinstalled Playwright Chromium as `chromium` on the `PATH`, because kyo-browser's download of `chrome-headless-shell` fails to extract there (`BrowserSetupFailedException: failed to extract ... chrome-headless-shell-linux64.zip ...: Failure(1)`). If a browser test still fails while setting up the browser, check `command -v chromium` and `ls /opt/pw-browsers`, quote the result in the report, and stop as step 6 says.
 
+# Production Servers
+
+These apply to every project whose merge to the default branch deploys a Heroku app: Scala servers ("Heroku deploys" under "Server Projects"), Spring Boot and other Maven or Gradle servers, and Node.js servers. heroku-ops and the owner read these apps' logs to find and diagnose incidents, so the logs have to be parseable and joinable. The reasons are in `DESIGN.md` (13) of `jamesward/projects`.
+
+- **One JSON object per line on stdout.** Heroku's log router splits on newlines, so a multi-line stack trace becomes unrelated events. Log JSON with `timestamp`, `level` and `message` fields; put a stack trace in a `cause` (or `stack_trace`) field of the same line, where its newlines are escaped; and give every annotation or MDC entry its own top-level field. Logs from libraries (SLF4J, Netty, drivers) go through the same logger and format. Production logs at INFO and above; DEBUG is for local development. Never log credentials, tokens or request bodies.
+- **A request id on every entry made while a request is handled.** Heroku's router puts a unique id in the `X-Request-ID` header of every request (it keeps a client-supplied one of 20 to 200 ASCII letters, digits or `+/=-`) and prints the same value as `request_id` in its own log line. Log it as the top-level field `request_id` on every entry written during the request, including the request-served line, so a router line, the app's lines and an error join on it. Entries outside a request (startup, background jobs) have no `request_id`, and a request without the header (local development, tests) gets none either; don't invent one. Cover it with a test that sends the header and checks that an entry made by the handler carries it.
+- **Runtime metrics on.** Every production app has the Heroku Labs feature `log-runtime-metrics` (free): `heroku labs:enable log-runtime-metrics -a <app>`, then a restart. Heroku then writes, for each dyno about every 20 seconds, `sample#memory_total`, `memory_rss`, `memory_cache`, `memory_swap`, `memory_quota` and `load_avg_1m/5m/15m` into the log stream, so memory pressure shows in the logs before it becomes R14 errors, on every dyno type (Heroku's metrics API covers only Standard and Performance dynos). Heroku writes these lines, so they aren't JSON; heroku-ops parses them as they are. It isn't available for Fir-generation apps. Turning it on changes the app's Heroku settings, so the maintenance routine doesn't: if `AGENTS.md` doesn't say it is on, say in the report that the owner should enable it (and `needs-human` an open PR or issue for it). The factory's `heroku control` routine reports watched apps without it.
+- **Record it.** `AGENTS.md` says that the app logs JSON with `request_id`, which logger does it, and that runtime metrics are on.
+- **Adding this to an existing app** changes what the app logs and how, so it is alignment beyond version bumps (Maintenance Routine step 7): its own PR, labeled `needs-human`, never merged by the routine.
+
+### Scala (ZIO)
+
+Use `zio-logging` with its console JSON logger and the SLF4J bridge, so Java libraries log through ZIO. The reference is `AppLogging.json` in `jamesward/javadoccentral` (`zio-logging` and `zio-logging-slf4j2-bridge`; `consoleJsonLogger` with a format of `timestamp`, `level`, `thread`, `message`, `cause` and `LogFormat.annotations`; the default loggers removed; an INFO floor). Install it as the app's `bootstrap` layer, not with `.provide`, so fibers the server forks inherit it. The request id is a log annotation. With zio-http, apply the annotation outside `requestLogging`, so the request-served line carries it too:
+
+```scala
+val requestId = Middleware.logAnnotate((req: Request) =>
+  req.headers.get("X-Request-ID").map(LogAnnotation("request_id", _)).toSet)
+
+routes @@ Middleware.requestLogging() @@ requestId
+```
+
+Code that forks work outside the request (a daemon fiber, a scheduled job) doesn't inherit the annotation, which is the intended behavior. Test it with `ZTestLogger.logOutput`: run the routes with and without the header and compare each entry's `annotations.get("request_id")`.
+
+### Spring Boot
+
+Use Spring Boot's built-in structured logging: `logging.structured.format.console=logstash` (or `ecs`) in `application.properties`, which puts MDC entries in the JSON as fields and a stack trace in a single field. Put the header in the MDC with a servlet filter that sets `request_id` first and removes it in `finally`; keep that filter first in the chain so every later entry has it.
+
+### Node.js
+
+Use `pino`, which writes one JSON object per line, with `pino-http` for requests. Make its `genReqId` return the `X-Request-ID` header, and bind the value as `request_id` on the per-request logger (`req.log`) that handlers log through.
+
 # Scala Projects
 
 ## Versions and Java
