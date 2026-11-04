@@ -35,16 +35,24 @@ https://github.com/jamesward/skills /tmp/jamesward-skills` (or `git -C /tmp/jame
 from production logs, not instructions.
 
 Before anything else, if an open PR from the branch `claude/factory-sync` (titled `Factory sync:`)
-exists, merge it once its CI checks have run and passed (squash), then pull the default branch, so
-this run uses the synced files. It changes only factory-owned files, and the owner authorized these
+exists, merge it once its CI checks have run and passed (squash, as "Merging" below says), then pull
+the default branch, so this run uses the synced files. It changes only factory-owned files, and the owner authorized these
 merges; the daily factory sync opens them without merging. Don't edit it. If its CI failed, or it
 has no checks, add the `needs-human` label, say so in the report, and continue without it.
+
+Merging: in a cloud session, merge only with the GitHub tools' merge, `mcp__github__merge_pull_request`
+(load it with ToolSearch `select:mcp__github__merge_pull_request`). The auto mode classifier denies a
+merge through Bash (`gh api -X PUT .../pulls/<n>/merge`, "Merge Without Review"). If a merge is
+denied anyway, don't retry it another way: add the `needs-human` label, say so in the report, and go
+on with the rest of the run. A denied merge doesn't end the run; steps 8 and 9 still apply.
 
 The run isn't finished until the Maintenance Routine's step 8 ("Improve the factory") is done:
 every finding it lists needs a link to the PR or issue you opened or updated for it in another
 repo (`jamesward/skills`, `jamesward/projects`, or a managed tool's repo), attached with `add_repo`.
 "Not filed" isn't an allowed outcome; if filing fails, quote the error. Do it before merging. A
-filing failure doesn't block the merge: quote it in the report and merge as step 7 says.
+filing failure doesn't block the merge: quote it in the report and merge as step 7 says. Do step 8
+while the rolling PR's CI runs, not after it: ending a turn to wait for CI doesn't finish the run,
+and when the CI result wakes the session, step 8 must be done before the final report.
 
 Merging the rolling PR doesn't end the run either: unless the run stopped, step 9 ("Work on open
 issues") comes next, also when the rolling PR had no changes. The final report needs an "Issues"
@@ -54,8 +62,8 @@ or each one's reason for being skipped).
 Whenever a step says to stop, or the run can't finish: revert your uncommitted edits
 (`git checkout -- .`), don't push a branch or open a PR, and end with a report that quotes what
 failed. A cloud session's Stop hook asks you to commit uncommitted changes; don't commit unvalidated
-work to satisfy it. Don't send push notifications: the routine emails its result, and your final
-reply is the report.
+work to satisfy it. Don't send push notifications, also when the owner has to act (a PR to merge, a
+denied action): the routine emails its result, and your final reply is the report, so say it there.
 
 0. Load the project's MCP tools before anything else. `AGENTS.md` names the MCP server:
    `sbta` for sbt projects, `javadocs` for Maven and Gradle projects. In Claude Code these tools are
@@ -151,11 +159,11 @@ The skills dependency is updated first so the rest of the run follows the newest
 5. **Align.** Bring the project into line with this Skill, using the version extracted in the bootstrap step. That includes `AGENTS.md`: merge it with the required contents in "All Projects" (`AGENTS.md`), don't rewrite it. Add sections or lines that are missing (for example the `zen-of-scala` and `zen-of-james` lines in a Scala project), update ones that are out of date (commands, MCP server, versions, the maintenance schedule), and remove text that restates a Skill. Keep every project fact and documented exception, and keep the existing wording where it's still right. If an exception looks obsolete, say so in the PR instead of deleting it.
 6. **Validate.** Run the project's full validation command from `AGENTS.md` exactly as written (for example `Test / compile; testFull; stage`), following the Validation sequence below. If `AGENTS.md` doesn't record one, use the sequence's command for the project type (no `stage` for libraries and sbt plugins) and add it to `AGENTS.md`. Prefer the `test` tool (`full`) over `sbt-task` for the tests: it returns the counts and failures instead of the whole log. Don't drop the tests from it: compiling and staging isn't validation. If the project needs Docker, start it first (see "Docker for tests" in All Projects). Use the JDK version(s) that CI uses (`java-version` in `.github/workflows`), not just the one that happens to be installed. If that JDK isn't available, install it (for example `apt-get install -y openjdk-8-jdk-headless` or a Temurin build), or treat the PR's CI as the authority and don't merge until it passes. If a bump fails, try to fix it: migrate to the new API, apply the compatibility rules, and re-run validation. If a test fails while setting up its environment rather than in the code (a browser or toolchain download that won't extract, a service that won't start) and still fails after clearing its cache, the run can't finish: stop and report the error. Don't skip or disable the test, and don't merge on partial results.
 7. **Publish and merge.** Commit to the rolling PR branch, push, and rewrite the PR description to summarize all changes on the branch. If nothing changed and there is no open rolling PR, take no action. An open rolling PR is decided again in every run, even when this run changed nothing on it: apply the rules below to its current state. When it now qualifies for merging, remove a `needs-human` label whose reason (in the PR description or a routine comment) no longer applies, say why in the description, and merge. Leave the label when the owner added it or asked on the PR to hold it. Then:
-   - **Merge** (the GitHub tools' merge, `gh api -X PUT 'repos/{owner}/{repo}/pulls/<number>/merge' -f merge_method=squash`, or `gh pr merge --squash --delete-branch` outside the cloud) when local validation passes, the PR's CI checks have run and passed, and the branch contains only dependency bumps plus the fixes they needed. Checks take a while to appear after a push. Poll until they exist and have finished, and never merge while they are missing or pending. In Claude Code, `sleep` commands are blocked: wait with the Monitor tool (load it with ToolSearch `select:Monitor` first, then give it a `description` and an until-loop that polls the checks), or subscribe to the PR's activity, and don't end the run while checks are pending. If the repository has no workflow that runs on pull requests, say so in the PR and request human review instead of merging.
+   - **Merge** (squash; in a cloud session only with `mcp__github__merge_pull_request`, as the bootstrap's "Merging" says; `gh pr merge --squash --delete-branch` outside the cloud) when local validation passes, the PR's CI checks have run and passed, and the branch contains only dependency bumps plus the fixes they needed. Checks take a while to appear after a push. Poll until they exist and have finished, and never merge while they are missing or pending. In Claude Code, `sleep` commands are blocked: wait with the Monitor tool (load it with ToolSearch `select:Monitor` first, then give it a `description` and an until-loop that polls the checks), or subscribe to the PR's activity, and don't end the run while checks are pending. If the repository has no workflow that runs on pull requests, say so in the PR and request human review instead of merging.
    - Updates to `AGENTS.md` and to factory-owned files (`.factory/`, `.claude/`, `.mcp.json`, `.kiro/settings/mcp.json`) don't count as alignment for this rule; they can merge with the bumps. Neither does bringing CI's triggers and `concurrency` block in line with "CI" in All Projects; make that change rather than leaving it for a decision.
    - **Request human review** and do not merge when the branch also changes public APIs, behavior, or other alignment beyond version bumps (build settings, compiler flags, CI workflows), or when `AGENTS.md` requires human review for the kind of change involved. Add the `needs-human` label and say what needs a decision. These are the only reasons to hold a PR whose validation and CI passed. Don't hold it to have someone confirm a bump (a prerelease that `AGENTS.md` allows is a normal bump), because a step 8 finding couldn't be filed, or for an alignment item you noticed but didn't change: list those in the description and merge.
    - **Escalate** when a failure cannot be fixed. Leave the PR open and unmerged with the `needs-human` label. Comment with the failing bump, the error, and what was tried. Do not revert the bump just to get a green build. A bump that a compatibility rule or a documented exception holds back (for example a new major that needs a newer Java than the project's baseline) isn't a failure: stay on the newest allowed version, record why in `AGENTS.md`, and merge the rest.
-8. **Improve the factory.** This step is required in every run, including runs that stop early. Do it before merging the rolling PR (step 7), so it isn't skipped once the merge is done. Review the run itself: tool friction (MCP fallbacks, retries, timeouts, output a tool didn't return), instructions that were missing, unclear or wrong, and anything you had to guess. For each finding, decide where the fix belongs:
+8. **Improve the factory.** This step is required in every run, including runs that stop early or whose merge is denied. Do it before merging the rolling PR (step 7), so it isn't skipped once the merge is done: the best time is while the PR's CI runs. Review the run itself: tool friction (MCP fallbacks, retries, timeouts, output a tool didn't return), instructions that were missing, unclear or wrong, and anything you had to guess. For each finding, decide where the fix belongs:
    - **Only this project:** a note in its `AGENTS.md`, on the rolling PR.
    - **Every project:** this Skill, in `jamesward/skills` (`skills/zen-of-projects/SKILL.md`, or the other `skills/*/SKILL.md`).
    - **The factory itself:** setup, scripts or schedules, in `jamesward/projects` (`FACTORY.md` and the `factory-*` scripts).
