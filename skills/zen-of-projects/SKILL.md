@@ -135,7 +135,7 @@ The skills dependency is updated first so the rest of the run follows the newest
    - `project/build.properties`: `sbt.version` (`org.scala-sbt:sbt`).
    - `./sbta` and `sbta.bat`: the daily factory sync keeps them at the latest [sbta release](https://github.com/jamesward/sbta/releases/latest) in managed repos, so leave them alone in the maintenance routine (cloud sessions often can't look up the latest release: `update-sbta` fails with `couldn't find the newest sbta release`). Outside the factory, update both from the release.
    - `project/plugins.sbt`: every `addSbtPlugin`. Resolve sbt 2 plugins by their `_sbt2_3` artifact (for example `com.skillsjars:skillsjars-sbt-plugin_sbt2_3`).
-   - sbt plugins cross-built for sbt 1 and sbt 2: the sbt 1 entry (Scala 2.12) of `pluginCrossBuild / sbtVersion` in `build.sbt` follows the latest sbt 1.x. Find it with `get_latest_version` for `org.scala-sbt:main_2.12` (sbt 1's main module; `org.scala-sbt:sbt` answers with the 2.x line), or `latest_stable org.scala-sbt:sbt 1.` without MCP. The sbt 2 entry stays at the lowest sbt 2 the plugin supports (`2.0.0`) unless the plugin needs a newer sbt 2 API; `AGENTS.md` records a different floor and its reason.
+   - Not `pluginCrossBuild / sbtVersion` in sbt plugins: those are floors, not dependencies (see "sbt Plugin Projects"). Leave them as `AGENTS.md` records them.
    - `build.sbt` (and any other `*.sbt` or `project/*.scala` that holds versions): `scalaVersion`, every library, and the `com.jamesward:skills` Skills dependency.
    - GitHub Actions versions in `.github/workflows`. Where a workflow is written in Pkl, bump its Pkl package versions instead and regenerate the YAML (see "Workflows written in Pkl" in All Projects).
    - Builds nested in the repo that are part of its tests or examples, such as an `example/` build or `src/sbt-test` fixtures. Leave fixtures that pin old versions on purpose.
@@ -153,7 +153,7 @@ The skills dependency is updated first so the rest of the run follows the newest
      latest_stable() { local g="${1%%:*}" a="${1##*:}"; curl -fsS --retry 5 --retry-delay 10 --retry-all-errors "https://repo.maven.apache.org/maven2/${g//.//}/$a/maven-metadata.xml" | grep -o '<version>[^<]*' | sed 's/<version>//' | grep -iE '^[0-9]+(\.[0-9]+)*([.-](final|release|ga|jre|android))?$' | grep -F -- "${2:-}" | grep -E "^${2//./\\.}" | sort -V | tail -1; }
      latest_stable org.scala-sbt:sbt        # prints e.g. 2.0.9; empty output means only prereleases exist
      latest_stable org.junit:junit-bom 5.   # latest release within the 5.x line
-     latest_stable org.scala-sbt:sbt 1.     # latest sbt 1.x (for pluginCrossBuild / sbtVersion)
+     latest_stable org.scala-sbt:sbt 1.     # latest sbt 1.x; get_latest_version for org.scala-sbt:main_2.12 gives the same
      ```
 
    - **GitHub Actions versions.** Use `git ls-remote --tags https://github.com/<owner>/<action>`, not the GitHub API. Cloud sessions can only call the API for the repositories attached to the session.
@@ -506,6 +506,8 @@ sbt plugins are libraries, so the Library Projects rules apply, plus:
 
 - Build the plugin with sbt's own Scala version, not the newest Scala (see "Compatibility rules for upgrades").
 - Test with sbt's scripted framework (`src/sbt-test`), and have CI run `scripted`.
+- **Supported sbt versions are floors.** `pluginCrossBuild / sbtVersion` sets the sbt each published artifact compiles against, which is the oldest sbt its users can run: sbt loads a plugin compiled against an older version of the same major, not one compiled against a newer one (a missing method fails at load time). So each entry (sbt 1 for Scala 2.12, sbt 2 for Scala 3) is a floor, set on purpose and recorded in `AGENTS.md` with its reason, and the maintenance routine doesn't bump it. Raise a floor only when the plugin needs an API that the floor lacks: say so in the PR, label it `needs-human` (it drops users on older sbt), and update `AGENTS.md`. The project's own build (`project/build.properties`) still follows the latest sbt.
+- **A plugin that supports sbt 1 and sbt 2 keeps both.** Most builds that use these plugins are still on sbt 1, and an sbt 2-only plugin can't be added to them at all. Don't drop either line in the maintenance routine.
 - Plugins cross-built for sbt 1 and sbt 2 run the scripted tests for both, or document in `AGENTS.md` which one they cover. Use `+scripted` in CI and validation: plain `scripted` runs only for the default `pluginCrossBuild / sbtVersion` and silently skips fixtures whose `project/build.properties` pins the other sbt (`Tests skipped in group ...`).
 
 ## Code Sample Projects
