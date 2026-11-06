@@ -3,7 +3,7 @@ name: zen-of-projects
 description: Whether creating new projects or bringing existing ones into compliance, do these things.
 ---
 
-# Automation &amp; Agent Guidance
+# Automation & Agent Guidance
 
 ## One source of truth
 
@@ -691,4 +691,3 @@ Classic Heroku buildpacks (`bin/detect`, `bin/compile`, `bin/release`, written i
 - **Agent readiness:** check the site with https://isitagentready.com and fix what applies. Skip authentication-related checks for public sites.
 - **Performance:** run Lighthouse (the engine behind PageSpeed Insights) headless against a local copy of the site, so changes are checked before they're published. In cloud sessions, get Chrome with `npx playwright install-deps chromium` and `npx playwright install chromium`, and pass `--no-sandbox --disable-dev-shm-usage` in `--chrome-flags`. Don't use the PageSpeed Insights API: it returns HTTP 429 without an API key.
 - **Hosting and infrastructure** live as IaC in a separate repository (for example `jamesward/domains`); note it in `AGENTS.md`. List every non-site file in the deploy's exclude list (for example `.slugignore`).
-</content_END_SENTINEL_NOT_REAL>
