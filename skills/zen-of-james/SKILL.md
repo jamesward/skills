@@ -17,6 +17,7 @@ NO MUTABILITY EVER!!!
 - Mutable variables may seem like a good idea. They are not.
 - Pure functions are the ideal.
 - When side effects are required, they should be represented as values / Effects. However, if this isn't possible because an effect-oriented approach isn't possible, the side-effecting functions should take an iterface as a parameter enabling easy testability of the operations that perform side effects.
+- Compose effects with the language's own constructs: for-comprehensions, `map` / `flatMap`, and the effect library's combinators. Don't use macro-based direct style such as `zio-direct` (`defer` / `.run`): it rewrites the code you wrote into different code at compile time, it has never had a stable release, and plain composition is what every reader and tool understands. Projects that use it remove it and rewrite that code.
 
 DATA TYPES & FUNCTIONS SHOULD BE DOMAIN ORIENTED
 - In languages with type aliases, wrap primitive types into domain types. For example, don't take a `customerId: String` create a type alias `CustomerId = String` and take the domain type instead.

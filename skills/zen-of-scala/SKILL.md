@@ -116,18 +116,37 @@ val response = Response(body = Body.from(artifact))
 
 ## ZIO Effect Composition
 
-- Prefer `zio-direct` (`defer:` / `.run`) as the default composition style over
-  `for`-comprehensions or `flatMap` chains:
+- Compose effects with `for`-comprehensions. Use `map`, `flatMap`, `*>` and the
+  combinators below where one step reads better that way. Don't use `zio-direct`
+  (`defer:` / `.run`), per `zen-of-james`:
 
   ```scala
-  defer:
-    val blocker = ZIO.service[FetchBlocker].run.blocker
-    val tmpDir  = ZIO.service[TmpDir].run
-    doWork(tmpDir).run
+  for
+    blocker <- ZIO.serviceWith[FetchBlocker](_.blocker)
+    tmpDir  <- ZIO.service[TmpDir]
+    result  <- doWork(tmpDir, blocker)
+  yield result
   ```
 
-- Do NOT nest `defer` blocks. If a sub-step is complex, extract it into its own
-  method with its own `defer`, then `.run` that method from the caller.
+- Keep a `for`-comprehension flat. If a sub-step is complex, extract it into its
+  own method that returns a `ZIO`, and bind it with `<-` from the caller.
+- **Removing `zio-direct`.** Rewrite each `defer:` block as plain composition,
+  keeping its behavior:
+  - `defer:` → `for` ... `yield`; `val x = e.run` → `x <- e`; a `.run` whose
+    value isn't used → `_ <- e`; a final `e.run` → bind it and `yield` it (or
+    end the chain with `flatMap`).
+  - An `if` / `match` that uses `.run` → make each branch an effect
+    (`if c then a else b`), and `flatMap` an effectful condition into it
+    (`cond.flatMap(c => if c then a else b)`); `ZIO.whenZIO` / `ZIO.unlessZIO`
+    when there's no `else`.
+  - A loop with `.run` inside → `ZIO.foreach` / `ZIO.foreachDiscard`
+    (sequential, as the loop was).
+  - `try` / `catch` around `.run` → `catchAll` / `catchSome` / `foldZIO`;
+    `finally` → `ensuring`.
+  - Pure `val`s between steps → `x = expr` inside the `for`.
+
+  Then remove the `zio-direct` dependency and its imports, and run the
+  project's full validation.
 - Access services with `ZIO.service[A]`, `ZIO.serviceWith`, or
   `ZIO.serviceWithZIO`. Model a service as a `case class` wrapping its
   collaborators/state, provided via `ZLayer`.
@@ -222,10 +241,10 @@ concurrent reader from being cut off mid-read.
 
 ```scala
 def lookup(gav: GAV): ZIO[Client & TmpDir & Scope, NotFoundError, File] =
-  defer:
-    val dir = extractTo(gav).run
-    ZIO.addFinalizer(deleteDir(dir).ignoreLogged).run
-    dir
+  for
+    dir <- extractTo(gav)
+    _   <- ZIO.addFinalizer(deleteDir(dir).ignoreLogged)
+  yield dir
 
 val cache = ScopedCache.makeWith(capacity, ScopedLookup(lookup)):
   case Exit.Success(_) => ttl
