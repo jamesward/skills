@@ -15,6 +15,7 @@ What is specific to static website projects. Everything else, including the roll
   - sends the site's own changes as the single rolling `Maintenance:` PR;
   - refers to this Skill for anything it says, instead of repeating it, and records only what is specific to the site (which pages to check, its sources, its generation tools).
 - `AGENTS.md` names both Skills.
+- **Project-only factory findings** (zen-of-projects step 8) don't go on the rolling `Maintenance:` PR, because a site merges that PR only when it holds content changes. File them as an issue in the site's repo, labeled `factory-improvement` and `needs-human`, with the proposed `AGENTS.md` or `.factory/` diff. The rolling PR still merges.
 
 ## Content and contributions
 
