@@ -328,7 +328,7 @@ Use `ProjectRef(localLibrary, "<project>")` for one module of a multi-project li
 
 - Use sbt's default resolvers: Maven Central plus the `local` Ivy repository. Never commit resolver configuration to a project. That rules out a `project/repositories` file, `-Dsbt.repository.config` or `-Dsbt.override.build.repos` in `.sbtopts` or `.jvmopts`, mirror URLs, and `Resolver.mavenLocal`, `Resolver.file`, or `file://` resolvers in the build.
 - To test against an unpublished artifact, use `publishLocal`. The `local` Ivy repository is already a default resolver, so no resolver change is needed. If a test really needs another resolver, keep it ephemeral: pass it for that one invocation (for example `./sbta 'set resolvers += Resolver.mavenLocal' test`) and make sure it is not in the committed diff.
-- Mirrors are environment configuration, for every build tool. Gradle and Maven projects follow the same rule: no mirror URLs or extra repositories committed for it. An environment can prefer a mirror with a user-level Gradle init script (`~/.gradle/init.d/*.init.gradle.kts` that adds the mirror first to the build's existing repositories) or a user-level Maven `~/.m2/settings.xml` profile (activated by default) whose repository and plugin repository is the mirror; Maven Central stays the fallback in both.
+- Mirrors are environment configuration for sbt and Maven: no mirror URLs or extra repositories committed for it. An environment can prefer a mirror with a user-level Maven `~/.m2/settings.xml` profile (activated by default) whose repository and plugin repository is the mirror, with Maven Central as the fallback. Gradle is the exception: its builds commit the repository order (see "Gradle").
 - An automated environment that gets rate-limited by Maven Central can put a mirror first in the user-level `~/.sbt/repositories`, with Maven Central as the fallback, and add `-Dsbt.override.build.repos=true` to the user-level `~/.config/sbt/sbtopts`:
 
   ```text
@@ -617,6 +617,24 @@ Maven and Gradle projects follow the same approach as sbt projects: a pinned wra
 ## Gradle
 
 - **Build files:** use the Kotlin DSL. When `gradle/libs.versions.toml` exists, versions live there; otherwise they live in the build files.
+- **Repositories:** declare them once, in `settings.gradle.kts`, in this order: Google's Maven Central mirror, then Maven Central, then (for plugins only) the Gradle Plugin Portal. Don't put a `repositories` block in `build.gradle.kts`. Without `pluginManagement`, Gradle resolves plugins only from the Plugin Portal, which answers most artifacts with a redirect (HTTP 303) to Maven Central and fails the build when that download fails. The mirror spares Maven Central's rate limit (HTTP 429 on shared cloud IPs); Maven Central serves what the mirror doesn't have yet (a release from the last few hours, which the mirror answers with 404). Gradle only moves to the next repository on a 404, so an unreachable repository still fails the build.
+
+  ```kotlin
+  pluginManagement {
+      repositories {
+          maven("https://maven-central.storage-download.googleapis.com/maven2/") { name = "GoogleMavenCentral" }
+          mavenCentral()
+          gradlePluginPortal()
+      }
+  }
+  dependencyResolutionManagement {
+      repositoriesMode = RepositoriesMode.FAIL_ON_PROJECT_REPOS
+      repositories {
+          maven("https://maven-central.storage-download.googleapis.com/maven2/") { name = "GoogleMavenCentral" }
+          mavenCentral()
+      }
+  }
+  ```
 - **Wrapper:** update with `./gradlew wrapper --gradle-version <version>`, then run `./gradlew wrapper` once more so the wrapper jar and scripts update too. The current Gradle release is the `version` field of `https://services.gradle.org/versions/current`.
 - **Plugins:** try `get_latest_version` first with the plugin's marker-artifact coordinates (groupId `<plugin id>`, artifactId `<plugin id>.gradle.plugin`). Many plugins that look Gradle-Plugin-Portal-only are actually mirrored to Maven Central under that marker artifact, and javadocs.dev resolves them directly with no extra hop. Only when that call fails, fall back to `https://plugins.gradle.org/m2/<plugin id with . as />/<plugin id>.gradle.plugin/maven-metadata.xml`, applying the version gotchas above. The portal answers with a redirect (HTTP 303) for some plugin ids, which itself redirects to the same Maven Central marker artifact and can hit its rate limit (HTTP 429); fetch it with `curl -L`, since without `-L` the output is empty.
 - **Wrapper line endings:** `./gradlew wrapper` rewrites `gradlew.bat` with LF endings, which shows as a whole-file diff in repos that keep it CRLF. Run `git checkout gradlew.bat` after updating the wrapper.
