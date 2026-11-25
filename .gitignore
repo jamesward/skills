@@ -1,2 +1,4 @@
 /.idea/
 /target/
+/.kiro/settings/lsp.json
+/.kiro/agents/
