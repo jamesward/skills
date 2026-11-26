@@ -583,6 +583,7 @@ Maven and Gradle projects follow the same approach as sbt projects: a pinned wra
 
 - **Versions:** pin every plugin version, including the build defaults (compiler, surefire, jar, install, deploy and so on), and keep shared versions in `<properties>`. Set `<maven.compiler.release>25</maven.compiler.release>` (or the older target `AGENTS.md` records for a library).
 - **Wrapper:** update with `./mvnw wrapper:wrapper -Dmaven=<version>`. The latest Maven is the latest stable `org.apache.maven:apache-maven`.
+- **Wrapper line endings:** `./mvnw wrapper:wrapper` regenerates `mvnw.cmd` from the plugin's own CRLF template, which shows as a whole-file diff in repos that keep it LF (as `mvnw.cmd` commits from a non-Windows machine normally are, since git does not convert line endings on its own). Normalize it back (for example `sed -i 's/\r$//' mvnw.cmd`) so the diff is only the version bump; don't `git checkout` it, because that would also discard the version bump the command just made.
 - **Compiler:**
 
   ```xml
