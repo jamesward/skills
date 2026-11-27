@@ -472,6 +472,7 @@ libraryDependencies += "com.jamesward" % "skills" % "<latest stable version>" % 
 
 - Scala servers on Heroku use exactly these buildpacks, in this order: `heroku/jvm`, then [`https://github.com/jamesward/buildpack-scala`](https://github.com/jamesward/buildpack-scala) (Scala Native servers: [`buildpack-scala-native`](https://github.com/jamesward/buildpack-scala-native)). They run the project's `./sbta` (or `./sbta`). For a multi-module build, set the `SBT_PROJECT` config var to the server module. Record the app name, URL and buildpacks in `AGENTS.md`.
 - JVM servers exit on `OutOfMemoryError` (`-XX:+ExitOnOutOfMemoryError`), so Heroku restarts the dyno instead of leaving one that can't allocate. `buildpack-scala` adds it to `JAVA_TOOL_OPTIONS`; for other JVM servers (for example Gradle or Maven Spring Boot apps on `heroku/gradle` or `heroku/java`) set the config var `JAVA_TOOL_OPTIONS=-XX:+ExitOnOutOfMemoryError`. Leave JVM memory sizing to `heroku/jvm`'s defaults unless `AGENTS.md` records a reason.
+- Config vars reach the build as well as the dynos. A JVM option set for the server in a config var, such as a heap cap in `JAVA_OPTS`, also applies to sbt during the build, so a server that sets one gives the build's sbt its own heap in `.sbtopts` (`-J-Xmx2g`). javadocs' `JAVA_OPTS=-Xmx400m` made its Heroku build run out of heap (jamesward/javadoccentral#275).
 - Don't change an app's buildpacks, stack or config vars in the maintenance routine; say in the PR what should change and label it `needs-human`.
 
 ### Testcontainers and test-scoped development
