@@ -11,7 +11,8 @@ What is specific to static website projects. Everything else, including the roll
 
 - Static sites have no build, so they don't extract SkillsJars. Each site's `.factory/MAINTENANCE.md` is written for that site, and:
   - starts by reading this Skill and `zen-of-projects` from a clone of `jamesward/skills` (`git clone -q --depth 1 https://github.com/jamesward/skills /tmp/jamesward-skills || git -C /tmp/jamesward-skills pull -q`, then `skills/zen-of-websites/SKILL.md` and `skills/zen-of-projects/SKILL.md`; a fetch of https://start.jamesward.com gets HTTP 403 in cloud sessions), or from `.factory/skills/<skill>/SKILL.md` while an unreleased version is being tested. The clone is the default branch, so a merged change reaches the sites without a release;
-  - includes the open-PR instruction from zen-of-projects' "`.factory/MAINTENANCE.md`";
+  - includes, verbatim, these paragraphs of the bootstrap in zen-of-projects' "`.factory/MAINTENANCE.md`": the open-PR instruction, the `claude/factory-sync` merge, "Merging", the step 8 and step 9 reminders and the stop rule, plus the "Incident" paragraph when heroku-ops watches a production app of the site. The routine's saved prompt defers to the file for these, so a site file without them leaves the routine guessing;
+  - ends its report with step 9's "Issues" line;
   - sends the site's own changes as the single rolling `Maintenance:` PR;
   - refers to this Skill for anything it says, instead of repeating it, and records only what is specific to the site (which pages to check, its sources, its generation tools).
 - `AGENTS.md` names both Skills.
@@ -55,6 +56,8 @@ What is specific to static website projects. Everything else, including the roll
   A site that checks more pages than `/` (its `.factory/MAINTENANCE.md` says which) runs `lh` for each page on both copies, with its own report files.
 
   If a port is still taken by a server from an earlier command, use other ports: don't try to kill processes this command didn't start (the classifier denies it as "Interfere With Workloads"). Performance scores vary by about ±0.1 between identical local runs, so when this run's performance differs from the baseline's by more than 0.05, run both again once and compare the second pair. Accessibility, best-practices and SEO scores and their failing audits are stable, so compare those directly.
+
+  A difference that follows from new content, not from a template, CSS or tool change, isn't a regression of this run: for example, a new item's image now sits above the fold. Confirm it by running `lh` on an earlier commit whose content has the same shape, report both results, and file the underlying cost (such as an image too large for its slot) as a project finding rather than holding the content.
 
 ## Hosting
 
